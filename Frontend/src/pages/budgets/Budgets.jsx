@@ -6,6 +6,7 @@ import {
   Calendar,
   CheckCircle2,
   Trash2,
+  Edit2,
   TrendingDown,
 } from 'lucide-react';
 import api from '../../services/api';
@@ -23,6 +24,7 @@ export const Budgets = () => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingBudget, setEditingBudget] = useState(null);
 
   // Form states
   const [categoryId, setCategoryId] = useState('');
@@ -59,7 +61,30 @@ export const Budgets = () => {
     setEndDate(lastDay);
   }, []);
 
-  const handleCreateBudget = async (e) => {
+  const openCreateModal = () => {
+    setEditingBudget(null);
+    setCategoryId('');
+    setAmountLimit('');
+    setPeriod('MONTH');
+    const now = new Date();
+    setStartDate(new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10));
+    setEndDate(new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10));
+    setError('');
+    setModalOpen(true);
+  };
+
+  const openEditModal = (b) => {
+    setEditingBudget(b);
+    setCategoryId(b.category_id || '');
+    setAmountLimit(String(Math.round(b.amount_limit)));
+    setPeriod(b.period || 'MONTH');
+    setStartDate(b.start_date ? b.start_date.slice(0, 10) : '');
+    setEndDate(b.end_date ? b.end_date.slice(0, 10) : '');
+    setError('');
+    setModalOpen(true);
+  };
+
+  const handleSaveBudget = async (e) => {
     e.preventDefault();
     if (!amountLimit || Number(amountLimit) <= 0) {
       setError('Hạn mức ngân sách phải lớn hơn 0');
@@ -69,20 +94,40 @@ export const Budgets = () => {
     setSubmitting(true);
     setError('');
 
+    const payload = {
+      category_id: categoryId || null,
+      amount_limit: Number(amountLimit),
+      period,
+      start_date: startDate,
+      end_date: endDate,
+    };
+
     try {
-      await api.post('/api/finance/budgets', {
-        category_id: categoryId || null,
-        amount_limit: Number(amountLimit),
-        period,
-        start_date: startDate,
-        end_date: endDate,
-      });
+      if (editingBudget) {
+        await api.put(`/api/finance/budgets/${editingBudget.budget_id}`, payload);
+      } else {
+        await api.post('/api/finance/budgets', payload);
+      }
       setModalOpen(false);
+      setEditingBudget(null);
       loadData();
     } catch (err) {
-      setError(err.message || 'Lỗi thiết lập ngân sách');
+      setError(err.message || 'Lỗi lưu thông tin ngân sách');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDeleteBudget = async (b) => {
+    const cat = categories.find((c) => c.category_id === b.category_id);
+    const name = cat ? cat.name : 'Tổng chi tiêu toàn hệ thống';
+    if (window.confirm(`Bạn có chắc chắn muốn xóa ngân sách "${name}"?`)) {
+      try {
+        await api.delete(`/api/finance/budgets/${b.budget_id}`);
+        loadData();
+      } catch (err) {
+        alert('Lỗi xóa ngân sách: ' + (err.message || 'Thất bại'));
+      }
     }
   };
 
@@ -107,11 +152,7 @@ export const Budgets = () => {
           variant="primary"
           size="sm"
           icon={Plus}
-          onClick={() => {
-            setCategoryId('');
-            setAmountLimit('');
-            setModalOpen(true);
-          }}
+          onClick={openCreateModal}
         >
           Thiết lập ngân sách mới
         </Button>
@@ -136,15 +177,15 @@ export const Budgets = () => {
             size="sm"
             className="mt-4"
             icon={Plus}
-            onClick={() => setModalOpen(true)}
+            onClick={openCreateModal}
           >
             Tạo ngân sách đầu tiên
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {budgets.map((b) => {
-            const cat = b.category_id ? catMap[b.category_id] : null;
+            const cat = catMap[b.category_id];
             const pct = b.percentage || 0;
             const isOver = pct >= 100;
             const isWarning = pct >= 80 && pct < 100;
@@ -162,33 +203,53 @@ export const Budgets = () => {
               >
                 <div>
                   <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h3 className="text-sm font-semibold text-text-primary flex items-center gap-1.5">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-semibold text-text-primary flex items-center gap-1.5 truncate">
                         <span
-                          className="w-2.5 h-2.5 rounded-full"
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
                           style={{ backgroundColor: cat?.color || '#3B82F6' }}
                         />
-                        {cat ? cat.name : 'Tổng chi tiêu toàn hệ thống'}
+                        <span className="truncate">{cat ? cat.name : 'Tổng chi tiêu toàn hệ thống'}</span>
                       </h3>
                       <div className="text-[11px] text-text-secondary mt-1 flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
+                        <Calendar className="w-3 h-3 shrink-0" />
                         <span>
                           {formatDate(b.start_date)} &ndash; {formatDate(b.end_date)}
                         </span>
                       </div>
                     </div>
 
-                    <span
-                      className={`text-xs font-bold px-2 py-0.5 rounded-sm tabular-nums ${
-                        isOver
-                          ? 'bg-status-negative/15 text-status-negative'
-                          : isWarning
-                          ? 'bg-status-warning/15 text-status-warning'
-                          : 'bg-status-positive/15 text-status-positive'
-                      }`}
-                    >
-                      {pct}%
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span
+                        className={`text-xs font-bold px-2 py-0.5 rounded-sm tabular-nums ${
+                          isOver
+                            ? 'bg-status-negative/15 text-status-negative'
+                            : isWarning
+                            ? 'bg-status-warning/15 text-status-warning'
+                            : 'bg-status-positive/15 text-status-positive'
+                        }`}
+                      >
+                        {pct}%
+                      </span>
+
+                      {/* Edit & Delete Action Buttons */}
+                      <div className="flex items-center gap-0.5 pl-1.5 border-l border-border-subtle">
+                        <button
+                          onClick={() => openEditModal(b)}
+                          className="text-text-secondary hover:text-accent-primary p-1 rounded hover:bg-bg-elevated transition-colors cursor-pointer"
+                          title="Chỉnh sửa hạn mức ngân sách"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteBudget(b)}
+                          className="text-text-secondary hover:text-status-negative p-1 rounded hover:bg-bg-elevated transition-colors cursor-pointer"
+                          title="Xóa ngân sách này"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Numbers */}
@@ -247,13 +308,13 @@ export const Budgets = () => {
         </div>
       )}
 
-      {/* Create Budget Modal */}
+      {/* Create / Edit Budget Modal */}
       <Modal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
-        title="Thiết lập hạn mức ngân sách"
+        title={editingBudget ? 'Chỉnh sửa hạn mức ngân sách' : 'Thiết lập hạn mức ngân sách'}
       >
-        <form onSubmit={handleCreateBudget} className="space-y-4">
+        <form onSubmit={handleSaveBudget} className="space-y-4">
           {error && (
             <div className="p-3 rounded bg-status-negative/10 border border-status-negative/30 text-xs text-status-negative">
               {error}
@@ -268,7 +329,7 @@ export const Budgets = () => {
             <option value="">-- Toàn bộ chi tiêu (Tổng thể) --</option>
             {categories.map((c) => (
               <option key={c.category_id} value={c.category_id}>
-                {c.name}
+                {c.parent_id ? `↳ ${c.name}` : c.name}
               </option>
             ))}
           </Select>
@@ -314,7 +375,7 @@ export const Budgets = () => {
               Hủy
             </Button>
             <Button type="submit" variant="primary" loading={submitting}>
-              Lưu ngân sách
+              {editingBudget ? 'Cập nhật ngân sách' : 'Lưu ngân sách'}
             </Button>
           </div>
         </form>

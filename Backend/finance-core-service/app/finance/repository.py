@@ -4,6 +4,7 @@ from typing import Optional, List, Dict, Any, Tuple
 from decimal import Decimal
 import aiomysql
 from app.core.database import db_pool
+from app.core.errors import AppError
 
 class FinanceRepository:
     # --- TRANSACTIONS ---
@@ -297,6 +298,61 @@ class FinanceRepository:
                 raise e
 
         return await FinanceRepository.get_budget(budget_id, user_id)
+
+    @staticmethod
+    async def update_budget(budget_id: str, user_id: str, payload: dict) -> Dict[str, Any]:
+        existing = await FinanceRepository.get_budget(budget_id, user_id)
+        if not existing:
+            raise AppError("BUDGET_NOT_FOUND", "Không tìm thấy ngân sách cần cập nhật", status_code=404)
+
+        updates = []
+        params = []
+        if "category_id" in payload:
+            updates.append("category_id = %s")
+            params.append(payload["category_id"])
+        if "amount_limit" in payload and payload["amount_limit"] is not None:
+            updates.append("amount_limit = %s")
+            params.append(payload["amount_limit"])
+        if "period" in payload and payload["period"]:
+            updates.append("period = %s")
+            params.append(payload["period"])
+        if "start_date" in payload and payload["start_date"]:
+            updates.append("start_date = %s")
+            params.append(payload["start_date"])
+        if "end_date" in payload and payload["end_date"]:
+            updates.append("end_date = %s")
+            params.append(payload["end_date"])
+
+        if updates:
+            params.extend([budget_id, user_id])
+            sql = f"UPDATE budgets SET {', '.join(updates)} WHERE budget_id = %s AND user_id = %s"
+            async with db_pool.acquire() as conn:
+                await conn.begin()
+                try:
+                    async with conn.cursor() as cur:
+                        await cur.execute(sql, tuple(params))
+                    await conn.commit()
+                except Exception as e:
+                    await conn.rollback()
+                    raise e
+
+        return await FinanceRepository.get_budget(budget_id, user_id)
+
+    @staticmethod
+    async def delete_budget(budget_id: str, user_id: str):
+        existing = await FinanceRepository.get_budget(budget_id, user_id)
+        if not existing:
+            raise AppError("BUDGET_NOT_FOUND", "Không tìm thấy ngân sách cần xóa", status_code=404)
+
+        async with db_pool.acquire() as conn:
+            await conn.begin()
+            try:
+                async with conn.cursor() as cur:
+                    await cur.execute("DELETE FROM budgets WHERE budget_id = %s AND user_id = %s", (budget_id, user_id))
+                await conn.commit()
+            except Exception as e:
+                await conn.rollback()
+                raise e
 
     # --- RECURRING RULES ---
     @staticmethod

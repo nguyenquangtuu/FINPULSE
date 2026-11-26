@@ -41,7 +41,9 @@ class BudgetCreate(BaseModel):
     end_date: date
 
 class BudgetUpdate(BaseModel):
+    category_id: Optional[str] = None
     amount_limit: Optional[Decimal] = Field(None, gt=0)
+    period: Optional[str] = None
     start_date: Optional[date] = None
     end_date: Optional[date] = None
 

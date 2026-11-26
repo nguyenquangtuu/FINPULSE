@@ -84,6 +84,27 @@ async def list_budgets(claims: dict = Depends(get_current_user_claims)):
     budgets = await FinanceRepository.list_budgets(claims["sub"])
     return success(data=budgets)
 
+@router.put("/budgets/{budget_id}")
+async def update_budget(
+    budget_id: str,
+    payload: BudgetUpdate,
+    claims: dict = Depends(get_current_user_claims),
+):
+    updated = await FinanceRepository.update_budget(
+        budget_id=budget_id,
+        user_id=claims["sub"],
+        payload=payload.model_dump(exclude_unset=True),
+    )
+    return success(data=updated, message="Cập nhật hạn mức ngân sách thành công")
+
+@router.delete("/budgets/{budget_id}")
+async def delete_budget(
+    budget_id: str,
+    claims: dict = Depends(get_current_user_claims),
+):
+    await FinanceRepository.delete_budget(budget_id, claims["sub"])
+    return success(message="Xóa ngân sách thành công")
+
 # --- RECURRING RULES ---
 @router.post("/recurring")
 async def create_recurring(
