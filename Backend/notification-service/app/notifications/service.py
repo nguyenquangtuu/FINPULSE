@@ -86,6 +86,27 @@ Hệ thống Cảnh báo Tài chính FINPULSE
         return record
 
     @staticmethod
+    async def broadcast_daily_reminder(title: str, content: str) -> int:
+        sent_count = 0
+        try:
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                resp = await client.get(
+                    f"{settings.AUTH_SERVICE_URL}/api/auth/internal/users/active",
+                    headers={"X-Internal-Service-Key": settings.INTERNAL_SERVICE_KEY},
+                )
+                if resp.status_code == 200:
+                    users = resp.json().get("data", [])
+                    for u in users:
+                        uid = u["user_id"]
+                        prefs = await NotificationRepository.get_preferences(uid)
+                        if prefs.get("daily_reminder_enabled", True):
+                            await NotificationService.process_daily_reminder(uid, title, content)
+                            sent_count += 1
+        except Exception as e:
+            logger.warning(f"Error broadcasting daily reminder: {e}")
+        return sent_count
+
+    @staticmethod
     async def _get_user_email(user_id: str) -> str:
         try:
             async with httpx.AsyncClient(timeout=3.0) as client:

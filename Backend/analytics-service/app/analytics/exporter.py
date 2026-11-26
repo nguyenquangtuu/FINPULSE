@@ -1,5 +1,6 @@
 import io
 import csv
+import os
 from typing import List, Dict, Any
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -7,6 +8,26 @@ from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib import colors
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+
+# Register Unicode fonts for Vietnamese text in PDF
+FONT_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "fonts")
+ARIAL_PATH = os.path.join(FONT_DIR, "arial.ttf")
+ARIALBD_PATH = os.path.join(FONT_DIR, "arialbd.ttf")
+
+PDF_FONT = "Helvetica"
+PDF_FONT_BOLD = "Helvetica-Bold"
+
+try:
+    if os.path.exists(ARIAL_PATH):
+        pdfmetrics.registerFont(TTFont("Arial", ARIAL_PATH))
+        PDF_FONT = "Arial"
+    if os.path.exists(ARIALBD_PATH):
+        pdfmetrics.registerFont(TTFont("Arial-Bold", ARIALBD_PATH))
+        PDF_FONT_BOLD = "Arial-Bold"
+except Exception as e:
+    pass
 
 class FinancialExporter:
     @staticmethod
@@ -68,7 +89,7 @@ class FinancialExporter:
         for col in ws.columns:
             max_len = max(len(str(cell.value or "")) for cell in col)
             col_letter = openpyxl.utils.get_column_letter(col[0].column)
-            ws.column_dimensions[col_letter].width = max(max_len + 3, 12)
+            ws.column_dimensions[col_letter].width = max(max_len + 3, 14)
 
         stream = io.BytesIO()
         wb.save(stream)
@@ -84,16 +105,18 @@ class FinancialExporter:
         title_style = ParagraphStyle(
             "ReportTitle",
             parent=styles["Heading1"],
-            fontSize=18,
-            leading=22,
+            fontName=PDF_FONT_BOLD,
+            fontSize=16,
+            leading=20,
             alignment=1, # Center
             textColor=colors.HexColor("#1E3A8A"),
         )
         subtitle_style = ParagraphStyle(
             "ReportSubtitle",
             parent=styles["Normal"],
-            fontSize=10,
-            leading=14,
+            fontName=PDF_FONT,
+            fontSize=9,
+            leading=13,
             alignment=1,
             textColor=colors.HexColor("#6B7280"),
         )
@@ -116,7 +139,7 @@ class FinancialExporter:
         summary_table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E2E8F0")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#1E293B")),
-            ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+            ("FONTNAME", (0, 0), (-1, -1), PDF_FONT_BOLD),
             ("FONTSIZE", (0, 0), (-1, -1), 9),
             ("ALIGN", (0, 0), (-1, -1), "CENTER"),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
@@ -134,16 +157,17 @@ class FinancialExporter:
             table_rows.append([
                 str(t.get("transaction_date", ""))[:10],
                 t_type,
-                cat_name[:20],
+                cat_name[:25],
                 f"{float(t.get('amount', 0)):,.0f}",
-                (t.get("note") or "")[:25],
+                (t.get("note") or "")[:30],
             ])
 
         tx_table = Table(table_rows, colWidths=[75, 45, 130, 110, 170])
         tx_table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1E3A8A")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTNAME", (0, 0), (-1, 0), PDF_FONT_BOLD),
+            ("FONTNAME", (0, 1), (-1, -1), PDF_FONT),
             ("FONTSIZE", (0, 0), (-1, -1), 8),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#E2E8F0")),
             ("ALIGN", (3, 1), (3, -1), "RIGHT"),

@@ -70,6 +70,11 @@ async def revoke_session(session_id: str, claims: dict = Depends(get_current_use
     return success(message="Thu hồi phiên đăng nhập thành công")
 
 # Internal endpoint for other microservices
+@router.get("/internal/users/active", dependencies=[Depends(verify_internal_key)])
+async def get_active_users_internal():
+    users = await AuthRepository.list_active_users()
+    return success(data=users)
+
 @router.get("/internal/users/{user_id}", dependencies=[Depends(verify_internal_key)])
 async def get_user_internal(user_id: str):
     user = await AuthRepository.get_user_by_id(user_id)

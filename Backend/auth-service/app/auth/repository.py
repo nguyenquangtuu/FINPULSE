@@ -20,6 +20,13 @@ class AuthRepository:
                 return await cur.fetchone()
 
     @staticmethod
+    async def list_active_users() -> List[Dict[str, Any]]:
+        async with db_pool.acquire() as conn:
+            async with conn.cursor(aiomysql.DictCursor) as cur:
+                await cur.execute("SELECT user_id, email, full_name, role FROM users WHERE status = 'ACTIVE'")
+                return await cur.fetchall()
+
+    @staticmethod
     async def create_user(full_name: str, email: str, role: str = "USER") -> Dict[str, Any]:
         user_id = str(uuid.uuid4())
         async with db_pool.acquire() as conn:

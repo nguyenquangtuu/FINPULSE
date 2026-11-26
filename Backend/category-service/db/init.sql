@@ -21,6 +21,18 @@ CREATE TABLE IF NOT EXISTS categories (
     CONSTRAINT fk_category_parent FOREIGN KEY (parent_id) REFERENCES categories (category_id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS user_category_overrides (
+    user_id CHAR(36) NOT NULL,
+    category_id CHAR(36) NOT NULL,
+    name VARCHAR(100) NULL,
+    icon VARCHAR(50) NULL,
+    color VARCHAR(20) NULL,
+    is_archived BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, category_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Danh mục Mặc định Hệ thống (System Default Categories - user_id = NULL)
 -- Danh mục Thu (INCOME)
 INSERT IGNORE INTO categories (category_id, user_id, name, type, icon, color, parent_id)

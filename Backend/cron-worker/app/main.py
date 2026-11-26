@@ -28,10 +28,9 @@ async def run_recurring_transactions_job():
         logger.warning(f"Could not connect to finance-core-service: {e}")
 
 async def run_daily_reminders_job():
-    logger.info("Executing scheduled job: check daily expense logging reminders...")
+    logger.info("Executing scheduled job: broadcast daily expense logging reminders...")
     try:
         payload = {
-            "user_id": "22222222-2222-2222-2222-222222222222", # Demo user reminder
             "title": "Nhắc nhở ghi sổ thu chi hôm nay",
             "content": "Đừng quên dành 1 phút cập nhật các khoản chi tiêu trong ngày trên FINPULSE nhé!",
         }
@@ -42,9 +41,9 @@ async def run_daily_reminders_job():
                 headers={"X-Internal-Service-Key": INTERNAL_SERVICE_KEY},
             )
             if resp.status_code == 200:
-                logger.info("Daily reminder sent successfully")
+                logger.info(f"Daily reminders job finished: {resp.json().get('message')}")
             else:
-                logger.warning(f"Reminder job returned status {resp.status_code}")
+                logger.warning(f"Reminder job returned status {resp.status_code}: {resp.text}")
     except Exception as e:
         logger.warning(f"Could not connect to notification-service: {e}")
 

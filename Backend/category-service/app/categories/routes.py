@@ -24,9 +24,25 @@ async def get_categories(
     tree = await CategoryService.get_categories_tree(claims["sub"], type, include_archived=include_archived)
     return success(data=tree)
 
+# --- Internal Inter-Service Endpoints (MUST be declared before /{category_id}) ---
+@router.get("/internal/all/list", dependencies=[Depends(verify_internal_key)])
+async def list_all_categories_internal():
+    categories = await CategoryRepository.list_all_flat()
+    for c in categories:
+        c["is_system"] = c["user_id"] is None
+    return success(data=categories)
+
+@router.get("/internal/{category_id}", dependencies=[Depends(verify_internal_key)])
+async def get_category_internal(category_id: str):
+    category = await CategoryRepository.get_by_id(category_id)
+    if not category:
+        raise AppError("CATEGORY_NOT_FOUND", "Không tìm thấy danh mục", status_code=404)
+    category["is_system"] = category["user_id"] is None
+    return success(data=category)
+
 @router.get("/{category_id}")
 async def get_category_by_id(category_id: str, claims: dict = Depends(get_current_user_claims)):
-    category = await CategoryRepository.get_by_id(category_id)
+    category = await CategoryRepository.get_by_id(category_id, claims["sub"])
     if not category:
         raise AppError("CATEGORY_NOT_FOUND", "Không tìm thấy danh mục", status_code=404)
     category["is_system"] = category["user_id"] is None
@@ -72,12 +88,3 @@ async def restore_category(category_id: str, claims: dict = Depends(get_current_
         user_role=claims.get("role", "USER"),
     )
     return success(message="Khôi phục danh mục thành công")
-
-# --- Internal Inter-Service Endpoints ---
-@router.get("/internal/{category_id}", dependencies=[Depends(verify_internal_key)])
-async def get_category_internal(category_id: str):
-    category = await CategoryRepository.get_by_id(category_id)
-    if not category:
-        raise AppError("CATEGORY_NOT_FOUND", "Không tìm thấy danh mục", status_code=404)
-    category["is_system"] = category["user_id"] is None
-    return success(data=category)

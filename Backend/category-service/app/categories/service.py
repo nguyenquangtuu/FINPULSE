@@ -28,13 +28,13 @@ class CategoryService:
     async def create_category(user_id: str, user_role: str, payload: dict) -> dict:
         parent_id = payload.get("parent_id")
         if parent_id:
-            parent = await CategoryRepository.get_by_id(parent_id)
+            parent = await CategoryRepository.get_by_id(parent_id, user_id)
             if not parent:
                 raise AppError("PARENT_NOT_FOUND", "Danh mục cha không tồn tại", status_code=404)
             if parent.get("type") != payload["type"]:
                 raise AppError("TYPE_MISMATCH", "Loại danh mục con phải trùng khớp với danh mục cha", status_code=400)
 
-        # Only ADMIN can create system categories (user_id = None)
+        # Only ADMIN can create global system categories (user_id = None)
         target_user_id = None if (user_role == "ADMIN" and payload.get("is_system")) else user_id
         
         category = await CategoryRepository.create(
@@ -50,14 +50,28 @@ class CategoryService:
 
     @staticmethod
     async def update_category(category_id: str, user_id: str, user_role: str, payload: dict) -> dict:
-        category = await CategoryRepository.get_by_id(category_id)
+        category = await CategoryRepository.get_by_id(category_id, user_id)
         if not category:
             raise AppError("CATEGORY_NOT_FOUND", "Không tìm thấy danh mục", status_code=404)
         
-        # Only prevent editing another user's private category
+        # If user is editing someone else's private category
         if category["user_id"] is not None and category["user_id"] != user_id and user_role != "ADMIN":
             raise AppError("FORBIDDEN", "Không có quyền chỉnh sửa danh mục của người dùng khác", status_code=403)
 
+        # If system category and not admin -> Save personal user override
+        if category["user_id"] is None and user_role != "ADMIN":
+            await CategoryRepository.upsert_user_override(
+                user_id=user_id,
+                category_id=category_id,
+                name=payload.get("name"),
+                icon=payload.get("icon"),
+                color=payload.get("color"),
+            )
+            updated = await CategoryRepository.get_by_id(category_id, user_id)
+            updated["is_system"] = True
+            return updated
+
+        # Otherwise update category record directly (user's private category or admin updating system category)
         updated = await CategoryRepository.update(
             category_id=category_id,
             name=payload.get("name"),
@@ -70,23 +84,41 @@ class CategoryService:
 
     @staticmethod
     async def delete_category(category_id: str, user_id: str, user_role: str):
-        category = await CategoryRepository.get_by_id(category_id)
+        category = await CategoryRepository.get_by_id(category_id, user_id)
         if not category:
             raise AppError("CATEGORY_NOT_FOUND", "Không tìm thấy danh mục", status_code=404)
         
         if category["user_id"] is not None and category["user_id"] != user_id and user_role != "ADMIN":
             raise AppError("FORBIDDEN", "Không có quyền xóa danh mục của người dùng khác", status_code=403)
 
-        # Soft delete (archive)
+        # If system category and not admin -> Archive only for this user
+        if category["user_id"] is None and user_role != "ADMIN":
+            await CategoryRepository.upsert_user_override(
+                user_id=user_id,
+                category_id=category_id,
+                is_archived=True,
+            )
+            return
+
+        # Soft delete (archive) original category
         await CategoryRepository.soft_delete(category_id)
 
     @staticmethod
     async def restore_category(category_id: str, user_id: str, user_role: str):
-        category = await CategoryRepository.get_by_id(category_id)
+        category = await CategoryRepository.get_by_id(category_id, user_id)
         if not category:
             raise AppError("CATEGORY_NOT_FOUND", "Không tìm thấy danh mục", status_code=404)
         
         if category["user_id"] is not None and category["user_id"] != user_id and user_role != "ADMIN":
             raise AppError("FORBIDDEN", "Không có quyền khôi phục danh mục của người dùng khác", status_code=403)
+
+        # If system category and not admin -> Un-archive for this user
+        if category["user_id"] is None and user_role != "ADMIN":
+            await CategoryRepository.upsert_user_override(
+                user_id=user_id,
+                category_id=category_id,
+                is_archived=False,
+            )
+            return
 
         await CategoryRepository.restore(category_id)

@@ -69,6 +69,14 @@ async def gateway_auth_and_proxy_middleware(request: Request, call_next):
     if path == "/health":
         return JSONResponse({"status": "ok", "service": "api-gateway"}, headers=get_cors_headers(request))
 
+    # 2. Block direct external access to internal inter-service endpoints (BR-09, NFR-06)
+    if "/internal/" in path:
+        return JSONResponse(
+            status_code=403,
+            content={"success": False, "error": {"code": "FORBIDDEN", "message": "Không có quyền truy cập endpoint nội bộ từ bên ngoài"}},
+            headers=get_cors_headers(request),
+        )
+
     # Check which service this request targets
     target_base = None
     for prefix, base_url in SERVICE_ROUTES.items():

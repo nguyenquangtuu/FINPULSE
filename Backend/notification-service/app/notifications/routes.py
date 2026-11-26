@@ -63,8 +63,11 @@ async def trigger_budget_alert_internal(payload: BudgetAlertPayload):
 
 @router.post("/internal/remind-daily", dependencies=[Depends(verify_internal_key)])
 async def trigger_daily_reminder_internal(payload: ReminderPayload):
-    record = await NotificationService.process_daily_reminder(payload.user_id, payload.title, payload.content)
-    return success(data=record, message="Gửi nhắc nhở thành công")
+    if payload.user_id:
+        record = await NotificationService.process_daily_reminder(payload.user_id, payload.title, payload.content)
+        return success(data=record, message="Gửi nhắc nhở thành công")
+    count = await NotificationService.broadcast_daily_reminder(payload.title, payload.content)
+    return success(data={"sent_count": count}, message=f"Đã gửi nhắc nhở tới {count} người dùng")
 
 # --- WEBSOCKET REAL-TIME ENDPOINT ---
 @router.websocket("/ws")
