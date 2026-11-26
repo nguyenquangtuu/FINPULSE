@@ -44,11 +44,13 @@ api.interceptors.response.use(
         } catch (refreshErr) {
           localStorage.removeItem('finpulse_access_token');
           localStorage.removeItem('finpulse_refresh_token');
+          localStorage.removeItem('finpulse_user');
           window.location.href = '/login';
         }
       } else {
         localStorage.removeItem('finpulse_access_token');
         localStorage.removeItem('finpulse_refresh_token');
+        localStorage.removeItem('finpulse_user');
       }
     }
     const errMessage = error.response?.data?.error?.message || error.message || 'Lỗi kết nối máy chủ';

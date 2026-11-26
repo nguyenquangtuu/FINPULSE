@@ -1,6 +1,6 @@
 import logging
 from typing import Optional
-from fastapi import FastAPI, Request, HTTPException, status, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, HTTPException, status, WebSocket, WebSocketDisconnect, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import jwt
@@ -47,13 +47,27 @@ SERVICE_ROUTES = {
     "/api/notifications": settings.NOTIFICATION_SERVICE_URL,
 }
 
+def get_cors_headers(request: Request) -> dict:
+    origin = request.headers.get("origin", "*")
+    return {
+        "Access-Control-Allow-Origin": origin if origin else "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+        "Access-Control-Allow-Headers": "Authorization, Content-Type, Accept, Origin, User-Agent, X-Requested-With, X-Internal-Service-Key",
+        "Access-Control-Allow-Credentials": "true",
+        "Access-Control-Max-Age": "86400",
+    }
+
 @app.middleware("http")
 async def gateway_auth_and_proxy_middleware(request: Request, call_next):
+    # 1. Handle CORS preflight OPTIONS requests immediately
+    if request.method == "OPTIONS":
+        return Response(status_code=204, headers=get_cors_headers(request))
+
     path = request.url.path
 
     # Let native gateway health check or docs pass directly
     if path == "/health":
-        return JSONResponse({"status": "ok", "service": "api-gateway"})
+        return JSONResponse({"status": "ok", "service": "api-gateway"}, headers=get_cors_headers(request))
 
     # Check which service this request targets
     target_base = None
@@ -63,7 +77,10 @@ async def gateway_auth_and_proxy_middleware(request: Request, call_next):
             break
 
     if not target_base:
-        return await call_next(request)
+        resp = await call_next(request)
+        for k, v in get_cors_headers(request).items():
+            resp.headers[k] = v
+        return resp
 
     # Authentication validation
     is_public = any(path.startswith(pub) for pub in PUBLIC_PREFIXES)
@@ -77,6 +94,7 @@ async def gateway_auth_and_proxy_middleware(request: Request, call_next):
             return JSONResponse(
                 status_code=401,
                 content={"success": False, "error": {"code": "UNAUTHORIZED", "message": "Yêu cầu Bearer Token xác thực"}},
+                headers=get_cors_headers(request),
             )
         token = auth_header.split(" ")[1]
         try:
@@ -88,27 +106,34 @@ async def gateway_auth_and_proxy_middleware(request: Request, call_next):
             return JSONResponse(
                 status_code=401,
                 content={"success": False, "error": {"code": "TOKEN_EXPIRED", "message": "Access Token đã hết hạn"}},
+                headers=get_cors_headers(request),
             )
         except Exception:
             return JSONResponse(
                 status_code=401,
                 content={"success": False, "error": {"code": "INVALID_TOKEN", "message": "Token không hợp lệ"}},
+                headers=get_cors_headers(request),
             )
 
     # Forward to target microservice
     target_url = f"{target_base}{path}"
     try:
-        return await forward_request(target_url, request, injected_headers)
+        resp = await forward_request(target_url, request, injected_headers)
+        for k, v in get_cors_headers(request).items():
+            resp.headers[k] = v
+        return resp
     except httpx.ConnectError:
         return JSONResponse(
             status_code=503,
             content={"success": False, "error": {"code": "SERVICE_UNAVAILABLE", "message": f"Dịch vụ đích tại {target_base} tạm thời không phản hồi"}},
+            headers=get_cors_headers(request),
         )
     except Exception as e:
         logger.error(f"Error forwarding to {target_url}: {e}")
         return JSONResponse(
             status_code=500,
             content={"success": False, "error": {"code": "GATEWAY_ERROR", "message": str(e)}},
+            headers=get_cors_headers(request),
         )
 
 # Proxy WebSocket connections directly to notification-service

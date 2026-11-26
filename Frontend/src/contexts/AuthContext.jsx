@@ -4,7 +4,14 @@ import api from '../services/api';
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('finpulse_user');
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -13,12 +20,24 @@ export const AuthProvider = ({ children }) => {
       if (token) {
         try {
           const res = await api.get('/api/auth/me');
-          setUser(res.data);
+          if (res?.data) {
+            setUser(res.data);
+            localStorage.setItem('finpulse_user', JSON.stringify(res.data));
+          }
         } catch (err) {
-          localStorage.removeItem('finpulse_access_token');
-          localStorage.removeItem('finpulse_refresh_token');
-          setUser(null);
+          console.warn('Session check warning:', err.message);
+          // Clear credentials if token expired or rejected
+          const msg = (err.message || '').toUpperCase();
+          if (msg.includes('TOKEN') || msg.includes('UNAUTHORIZED') || msg.includes('401')) {
+            localStorage.removeItem('finpulse_access_token');
+            localStorage.removeItem('finpulse_refresh_token');
+            localStorage.removeItem('finpulse_user');
+            setUser(null);
+          }
         }
+      } else {
+        localStorage.removeItem('finpulse_user');
+        setUser(null);
       }
       setLoading(false);
     };
@@ -43,6 +62,7 @@ export const AuthProvider = ({ children }) => {
     const { access_token, refresh_token, user: userData } = res.data;
     localStorage.setItem('finpulse_access_token', access_token);
     localStorage.setItem('finpulse_refresh_token', refresh_token);
+    localStorage.setItem('finpulse_user', JSON.stringify(userData));
     setUser(userData);
     return userData;
   };
@@ -50,14 +70,17 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem('finpulse_access_token');
     localStorage.removeItem('finpulse_refresh_token');
+    localStorage.removeItem('finpulse_user');
     setUser(null);
     window.location.href = '/login';
   };
 
   const updateProfile = async (payload) => {
     const res = await api.put('/api/auth/me', payload);
-    setUser(res.data);
-    return res.data;
+    const updated = res.data;
+    setUser(updated);
+    localStorage.setItem('finpulse_user', JSON.stringify(updated));
+    return updated;
   };
 
   return (
