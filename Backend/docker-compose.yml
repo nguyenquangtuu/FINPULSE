@@ -1,0 +1,250 @@
+services:
+
+  mysql:
+    image: mysql:8.0
+    container_name: finpulse-mysql
+    restart: unless-stopped
+    command: --port=8552 --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "8552:8552"
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./auth-service/db/init.sql:/docker-entrypoint-initdb.d/01-auth.sql:ro
+      - ./finance-core-service/db/init.sql:/docker-entrypoint-initdb.d/02-finance.sql:ro
+      - ./category-service/db/init.sql:/docker-entrypoint-initdb.d/03-category.sql:ro
+      - ./attachment-service/db/init.sql:/docker-entrypoint-initdb.d/04-attachment.sql:ro
+      - ./notification-service/db/init.sql:/docker-entrypoint-initdb.d/05-notification.sql:ro
+    networks:
+      - finpulse-net
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: finpulse-mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - finpulse-net
+
+  minio:
+    image: minio/minio:latest
+    container_name: finpulse-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: miniopassword
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - finpulse-net
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+    container_name: finpulse-gateway
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: 8000
+      JWT_SECRET: finpulse_jwt_super_secret_key_2026
+      INTERNAL_SERVICE_KEY: finpulse_internal_service_secret_token_2026
+      AUTH_SERVICE_URL: http://auth-service:8001
+      FINANCE_SERVICE_URL: http://finance-core-service:8002
+      CATEGORY_SERVICE_URL: http://category-service:8003
+      ANALYTICS_SERVICE_URL: http://analytics-service:8004
+      ATTACHMENT_SERVICE_URL: http://attachment-service:8005
+      OCR_SERVICE_URL: http://ocr-service:8006
+      NOTIFICATION_SERVICE_URL: http://notification-service:8007
+    depends_on:
+      - auth-service
+      - finance-core-service
+    networks:
+      - finpulse-net
+
+  auth-service:
+    build:
+      context: ./auth-service
+    container_name: finpulse-auth-service
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      PORT: 8001
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 8552
+      MYSQL_USER: root
+      MYSQL_PASSWORD: rootpassword
+      MYSQL_DATABASE: auth_db
+      JWT_SECRET: finpulse_jwt_super_secret_key_2026
+      JWT_ACCESS_EXPIRE_MINUTES: 60
+      JWT_REFRESH_EXPIRE_DAYS: 7
+      INTERNAL_SERVICE_KEY: finpulse_internal_service_secret_token_2026
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      MAIL_FROM: noreply@finpulse.local
+    depends_on:
+      - mysql
+      - mailpit
+    networks:
+      - finpulse-net
+
+  finance-core-service:
+    build:
+      context: ./finance-core-service
+    container_name: finpulse-finance-service
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    environment:
+      PORT: 8002
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 8552
+      MYSQL_USER: root
+      MYSQL_PASSWORD: rootpassword
+      MYSQL_DATABASE: finance_db
+      JWT_SECRET: finpulse_jwt_super_secret_key_2026
+      INTERNAL_SERVICE_KEY: finpulse_internal_service_secret_token_2026
+      NOTIFICATION_SERVICE_URL: http://notification-service:8007
+      CATEGORY_SERVICE_URL: http://category-service:8003
+    depends_on:
+      - mysql
+    networks:
+      - finpulse-net
+
+  category-service:
+    build:
+      context: ./category-service
+    container_name: finpulse-category-service
+    restart: unless-stopped
+    ports:
+      - "8003:8003"
+    environment:
+      PORT: 8003
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 8552
+      MYSQL_USER: root
+      MYSQL_PASSWORD: rootpassword
+      MYSQL_DATABASE: category_db
+      JWT_SECRET: finpulse_jwt_super_secret_key_2026
+      INTERNAL_SERVICE_KEY: finpulse_internal_service_secret_token_2026
+    depends_on:
+      - mysql
+    networks:
+      - finpulse-net
+
+  analytics-service:
+    build:
+      context: ./analytics-service
+    container_name: finpulse-analytics-service
+    restart: unless-stopped
+    ports:
+      - "8004:8004"
+    environment:
+      PORT: 8004
+      JWT_SECRET: finpulse_jwt_super_secret_key_2026
+      INTERNAL_SERVICE_KEY: finpulse_internal_service_secret_token_2026
+      FINANCE_SERVICE_URL: http://finance-core-service:8002
+      CATEGORY_SERVICE_URL: http://category-service:8003
+    depends_on:
+      - finance-core-service
+    networks:
+      - finpulse-net
+
+  attachment-service:
+    build:
+      context: ./attachment-service
+    container_name: finpulse-attachment-service
+    restart: unless-stopped
+    ports:
+      - "8005:8005"
+    environment:
+      PORT: 8005
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 8552
+      MYSQL_USER: root
+      MYSQL_PASSWORD: rootpassword
+      MYSQL_DATABASE: attachment_db
+      JWT_SECRET: finpulse_jwt_super_secret_key_2026
+      INTERNAL_SERVICE_KEY: finpulse_internal_service_secret_token_2026
+      MINIO_ENDPOINT: minio:9000
+      MINIO_PUBLIC_ENDPOINT: localhost:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: miniopassword
+      MINIO_BUCKET: finance-attachments
+      MINIO_SECURE: "false"
+    depends_on:
+      - mysql
+      - minio
+    networks:
+      - finpulse-net
+
+  ocr-service:
+    build:
+      context: ./ocr-service
+    container_name: finpulse-ocr-service
+    restart: unless-stopped
+    ports:
+      - "8006:8006"
+    environment:
+      PORT: 8006
+      JWT_SECRET: finpulse_jwt_super_secret_key_2026
+      INTERNAL_SERVICE_KEY: finpulse_internal_service_secret_token_2026
+      CATEGORY_SERVICE_URL: http://category-service:8003
+    networks:
+      - finpulse-net
+
+  notification-service:
+    build:
+      context: ./notification-service
+    container_name: finpulse-notification-service
+    restart: unless-stopped
+    ports:
+      - "8007:8007"
+    environment:
+      PORT: 8007
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 8552
+      MYSQL_USER: root
+      MYSQL_PASSWORD: rootpassword
+      MYSQL_DATABASE: notification_db
+      JWT_SECRET: finpulse_jwt_super_secret_key_2026
+      INTERNAL_SERVICE_KEY: finpulse_internal_service_secret_token_2026
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      MAIL_FROM: noreply@finpulse.local
+    depends_on:
+      - mysql
+      - mailpit
+    networks:
+      - finpulse-net
+
+  cron-worker:
+    build:
+      context: ./cron-worker
+    container_name: finpulse-cron-worker
+    restart: unless-stopped
+    environment:
+      FINANCE_SERVICE_URL: http://finance-core-service:8002
+      NOTIFICATION_SERVICE_URL: http://notification-service:8007
+      INTERNAL_SERVICE_KEY: finpulse_internal_service_secret_token_2026
+    depends_on:
+      - finance-core-service
+      - notification-service
+    networks:
+      - finpulse-net
+
+networks:
+  finpulse-net:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  minio_data:

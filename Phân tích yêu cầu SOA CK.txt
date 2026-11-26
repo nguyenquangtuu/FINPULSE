@@ -1,0 +1,504 @@
+﻿PERSONAL FINANCE & EXPENSE MANAGEMENT PLATFORM
+Đề tài: Xây dựng nền tảng quản lý thu chi cá nhân thông minh và hỗ trợ lập ngân sách
+1. Giới thiệu
+1.1 Bối cảnh và Lý do hình thành đề tài
+Trong nhịp sống hiện đại, đặc biệt đối với sinh viên và người đi làm trẻ, việc kiểm soát dòng tiền cá nhân ngày càng trở nên khó khăn khi các khoản chi tiêu nhỏ lẻ diễn ra liên tục mỗi ngày thông qua cả tiền mặt lẫn ví điện tử, chuyển khoản. Tuy nhiên, phần lớn người dùng hiện nay vẫn gặp phải 3 rào cản lớn:
+1. Ghi chép thủ công rời rạc và dễ bỏ cuộc: Việc ghi chú bằng sổ tay, bảng tính Excel hoặc nhập liệu hoàn toàn thủ công trên các ứng dụng truyền thống tốn nhiều thao tác, khiến người dùng nhanh chóng nản lòng và bỏ dở việc theo dõi sau một thời gian ngắn.
+2. Thiếu cảnh báo kiểm soát bội chi kịp thời: Người dùng thường chỉ nhận ra mình đã tiêu quá tay vào cuối tháng khi tổng kết lại số liệu, thay vì được cảnh báo ngay tại thời điểm chi tiêu chạm ngưỡng nguy hiểm.
+3. Thách thức trong việc mở rộng và bảo trì vi dịch vụ (Microservices): Khi phân tách hệ thống thành các dịch vụ độc lập (xác thực, ghi chép giao dịch & ngân sách, xuất báo cáo, xử lý ảnh hóa đơn), việc tổ chức lại các miền nghiệp vụ cốt lõi vào dịch vụ tài chính hợp nhất (finance-core-service) giúp giảm thiểu các lời gọi REST API đồng bộ liên dịch vụ, đảm bảo tính nhất quán dữ liệu giao dịch và ngân sách.
+Xuất phát từ nhu cầu thực tế đó, nhóm đề xuất đề tài "Xây dựng nền tảng quản lý thu chi cá nhân thông minh và hỗ trợ lập ngân sách" áp dụng Kiến trúc Vi dịch vụ (Microservices Architecture). Hệ thống không chỉ giải quyết bài toán ghi chép, lập hạn mức ngân sách, cảnh báo vượt ngưỡng và hỗ trợ nhập liệu nhanh qua quét hóa đơn tự động (OCR), mà còn phân tách rõ ràng từng miền nghiệp vụ thành các dịch vụ độc lập (với finance-core-service quản lý tập trung giao dịch và ngân sách), đảm bảo tính dễ bảo trì và mở rộng độc lập.
+1.2 Mục đích
+Tài liệu này đặc tả các yêu cầu phần mềm của Personal Finance & Expense Management Platform. Tài liệu xác định phạm vi, tác nhân (actors), yêu cầu chức năng, quy tắc nghiệp vụ, yêu cầu dữ liệu, yêu cầu giao diện ngoài, yêu cầu phi chức năng, ràng buộc và tiêu chí chấp nhận của hệ thống. Đây là baseline dùng cho phân tích, thiết kế kiến trúc vi dịch vụ (microservices), phát triển và kiểm thử hệ thống.
+1.3 Phạm vi sản phẩm
+Hệ thống cung cấp giải pháp tài chính cá nhân toàn diện, cho phép User quản lý thông tin cá nhân, ghi nhận và theo dõi các giao dịch thu/chi linh hoạt. Hệ thống tích hợp công nghệ quét hóa đơn tự động (OCR) hỗ trợ trích xuất thông tin nhanh chóng, thiết lập hạn mức ngân sách và cảnh báo thời gian thực. Bên cạnh đó, hệ thống hỗ trợ lưu trữ tệp tin và kết xuất báo cáo đa dạng.
+1.4 Trong phạm vi áp dụng
+* Đăng ký (nhập Email và Họ tên), đăng nhập không mật khẩu qua mã Email OTP và quản lý phiên làm việc.
+* Quản lý hồ sơ cá nhân, cấu hình đơn vị tiền tệ hiển thị mặc định (VND, USD) và tùy chọn giao diện.
+* Quản lý sổ ghi chép giao dịch thu chi cá nhân (đơn lẻ và định kỳ).
+* Phân cấp và quản trị danh mục thu chi mặc định và tùy biến.
+* Lập ngân sách theo danh mục/thời gian, theo dõi tiến độ chi tiêu theo thời gian thực.
+* Thống kê dòng tiền ghi chép, trực quan hóa biểu đồ và xuất báo cáo tài chính (PDF, XLSX, CSV).
+* Hệ thống thông báo nhắc nhở ghi chép và cảnh báo vượt hạn mức ngân sách qua Email / Trung tâm thông báo thời gian thực (Real-time Notification Center) trên Web App sử dụng WebSocket/SSE.
+* Tự động bóc tách và trích xuất thông tin hóa đơn (số tiền, danh mục, ngày phát sinh, nhà cung cấp) thông qua dịch vụ OCR (ocr-service).
+* Hệ thống thông báo nhắc nhở ghi chép và cảnh báo vượt hạn mức ngân sách qua Email / Trung tâm thông báo (Notification Center).
+
+
+1.5 Thuật ngữ và định nghĩa
+
+
+
+
+Thuật ngữ
+	Định nghĩa
+	User
+	Người dùng cá nhân sử dụng ứng dụng để quản lý tài chính và ghi chép chi tiêu.
+	System Admin
+	Người quản trị hệ thống có thẩm quyền quản lý tài khoản, danh mục hệ thống và giám sát vận hành.
+	Automated Task Worker
+	Tiến trình nội bộ tự động của hệ thống (Cron jobs) thực hiện các tác vụ chạy ngầm định kỳ (như kiểm tra và sinh giao dịch lặp, gửi nhắc nhở).
+	Transaction
+	Bản ghi phát sinh thu chi (khoản Thu hoặc khoản Chi) gắn với số tiền, danh mục và thời điểm.
+	Account
+	Tài khoản người dùng cá nhân trong hệ thống.
+	Category
+	Danh mục phân loại bản chất giao dịch (ví dụ: Ăn uống, Mua sắm, Lương, Giải trí).
+	Budget
+	Hạn mức tài chính tối đa được đặt cho một hoặc nhiều danh mục trong một chu kỳ xác định (tuần, tháng, năm).
+	Attachment
+	Tệp chứng từ đính kèm (ảnh hóa đơn JPEG/PNG, file PDF) xác thực giao dịch.
+	JWT
+	JSON Web Token sử dụng cơ chế Access Token và Refresh Token để xác thực người dùng an toàn.
+	2. Các Tác nhân và Trách nhiệm
+
+
+
+
+Nhóm tác nhân
+	Tên tác nhân
+	Bản chất & Vai trò thực tế
+	Tác nhân chính (Con người)
+	1. User
+	Nhân vật trung tâm của toàn bộ ứng dụng. Tự quản lý hồ sơ, ghi chép thu chi, quét hóa đơn OCR, lập danh mục riêng, đặt hạn mức ngân sách và xem báo cáo của chính mình.
+	Tác nhân quản trị (Con người)
+	2. System Admin(Kế thừa từ User)
+	Là một User có quyền quản trị hệ thống (role = ADMIN). Quản lý dữ liệu dùng chung (bộ danh mục mặc định) và trạng thái tài khoản, không truy cập dữ liệu tài chính riêng tư của User.
+	Tác nhân thời gian (Hệ thống nội bộ)
+	3. Automated Task Worker
+	Tác nhân ngầm không có giao diện: tự động quét lịch định kỳ (Cron job) để gọi REST API sinh giao dịch lặp và gửi thông báo nhắc nhở định kỳ.
+	Tác nhân bên ngoài (Third-party APIs)
+	4. External Services
+	• External OCR: Trích xuất thông tin hóa đơn thành JSON.
+• Email Service: Gửi OTP và email cảnh báo.
+• Cloud Storage (MinIO / S3): Lưu trữ file hóa đơn chứng từ.
+• Web Browser / WebSocket Client: Tiếp nhận và hiển thị thông báo thời gian thực.
+• Email Service: Gửi OTP và email cảnh báo.
+• Cloud Storage (MinIO / S3): Lưu trữ file hóa đơn chứng từ.
+
+
+	
+
+
+
+
+
+3. Phân tích nghiệp vụ
+3.1 Nghiệp vụ Quản lý Người dùng & Xác thực Bảo mật
+* Đăng ký không mật khẩu: Đăng ký tài khoản bằng Email (duy nhất trên toàn hệ thống — BR-01) và Họ tên; xác thực kích hoạt tài khoản qua mã Email OTP.
+* Xác thực đăng nhập không mật khẩu: Đăng nhập bằng Email kết hợp mã xác thực Email OTP.
+* Quản trị phiên: Theo dõi danh sách thiết bị đang đăng nhập, cho phép thu hồi token và đăng xuất từ xa.
+3.2 Nghiệp vụ Quản lý & Ghi chép Thu - Chi
+* Giao dịch đơn lẻ: Tạo, sửa, xóa khoản Thu hoặc Chi gắn liền với danh mục, thời gian, số tiền và ghi chú.
+* Giao dịch định kỳ (Recurring): Người dùng thiết lập lịch lặp (ngày, tuần, tháng) cho các khoản cố định (tiền nhà, tiền điện/nước, lương) để Tiến trình tác vụ tự động (Automated Task Worker) tự động sinh bản ghi đúng chu kỳ.
+* Đính kèm chứng từ (kết hợp attachment-service): Tải ảnh hóa đơn/PDF lên Cloud Object Storage (MinIO/S3), truy xuất an toàn thông qua Presigned URL có thời hạn ngắn.
+3.3 Nghiệp vụ Phân loại & Quản trị Danh mục Thu - Chi
+* Phân cấp danh mục: Quản lý phân tầng Cha - Con (Parent - Child).
+* Danh mục hệ thống vs Danh mục cá nhân: System Admin duy trì bộ danh mục mặc định chuẩn; User có quyền tạo thêm danh mục riêng tùy biến icon, màu sắc.
+* Toàn vẹn dữ liệu: Không xóa vật lý các danh mục đã từng phát sinh giao dịch; chỉ chuyển trạng thái ẩn/lưu trữ (Soft Delete).
+3.4 Nghiệp vụ Quản trị Hạn mức Ngân sách & Kiểm soát Bội chi
+* Lập hạn mức: Thiết lập hạn mức chi tiêu tối đa theo danh mục hoặc tổng thể cho từng chu kỳ (tuần, tháng, năm).
+* Giám sát trực tiếp nội bộ: Mỗi khi có giao dịch chi tiêu mới được ghi nhận, chỉnh sửa hoặc xóa, finance-core-service sẽ trực tiếp tính toán lại tỷ lệ % tiêu dùng và hạn mức còn lại trong cùng một cơ sở dữ liệu mà không cần gọi API bên ngoài.
+* Cảnh báo bội chi đồng bộ & thời gian thực: Khi chi tiêu chạm/vượt các mốc cảnh báo (80%, 90%, 100%), finance-core-service sẽ gọi REST API sang notification-service để gửi thông báo trên Web App theo thời gian thực (WebSocket/SSE) và Email đến User.
+3.5 Nghiệp vụ Thống kê Dòng tiền & Xuất Báo cáo Tài chính
+* Thống kê & Xuất báo cáo: Tổng hợp dòng tiền ròng (Thu - Chi), trực quan hóa bằng biểu đồ cơ cấu và biến động theo thời gian; kết xuất bảng kê ra file PDF, XLSX, CSV.
+3.6 Nghiệp vụ Quét & Đọc thông tin hóa đơn tự động (OCR)
+* Tiếp nhận chứng từ: Tiếp nhận tệp ảnh hóa đơn (JPEG, PNG) từ người dùng thông qua attachment-service.
+* Trích xuất thông tin tự động (ocr-service): Kết nối External OCR / Vision API để nhận dạng chữ in trên hóa đơn và bóc tách dữ liệu cấu trúc (JSON) gồm: Số tiền, Ngày giao dịch, Tên đơn vị bán/nhà cung cấp và Gợi ý danh mục phù hợp.
+* Điền tự động và Xác nhận: Điền sẵn dữ liệu bóc tách được vào biểu mẫu nhập giao dịch (UC-04) để người dùng kiểm tra và xác nhận trước khi lưu trữ.
+
+
+4. Phân rã Chức năng Hệ thống (Microservices Architecture)
+
+
+
+
+
+
+Dịch vụ (Service)
+	Trách nhiệm cốt lõi
+	Yêu cầu
+	Tác nhân
+	auth-service
+	Định danh, đăng ký (Email và Họ tên), đăng nhập không mật khẩu qua mã Email OTP, phân quyền, cấp token JWT, quản lý hồ sơ và phiên làm việc.
+	FR-01 → FR-06
+	User, System Admin
+	finance-core-service
+	Quản lý giao dịch thu/chi (CRUD), xử lý giao dịch định kỳ (Recurring), lập hạn mức ngân sách và trực tiếp tính toán, giám sát tiến độ chi tiêu/ngân sách trong cùng một cơ sở dữ liệu.
+	FR-07 → FR-09, FR-13 → FR-16
+	User, Automated Task Worker
+	category-service
+	Quản lý danh mục Cha-Con, danh mục hệ thống/cá nhân, tùy chỉnh icon/màu sắc và lưu trữ ẩn (Soft Delete).
+	FR-10 → FR-12
+	User, System Admin
+	analytics-service
+	Tổng hợp dòng tiền ròng, trực quan hóa biểu đồ, phân tích thói quen và xuất báo cáo (PDF, XLSX, CSV).
+	FR-17 → FR-20
+	User
+	attachment-service
+	Kiểm tra định dạng tệp hóa đơn, lưu trữ đối tượng trên MinIO/S3 và sinh Presigned URL truy cập an toàn.
+	FR-21 → FR-23
+	User, External Services
+	ocr-service
+	Kết nối External OCR / Vision API để nhận dạng chữ in trên hóa đơn, bóc tách dữ liệu JSON (số tiền, ngày, nơi bán) và gợi ý danh mục.
+	FR-24 → FR-25
+	User, External Services
+	notification-service
+	Tiếp nhận yêu cầu REST API cảnh báo/nhắc nhở, đẩy thông báo thời gian thực qua WebSocket/SSE lên Web App, gửi Email và quản lý trung tâm thông báo (Notification Center) trên trình duyệt.
+	FR-26 → FR-28
+	User, Automated Task Worker, External Services
+	
+
+4.1 Yêu cầu Chức năng
+4.1.1 Dịch vụ Xác thực & Người dùng (auth-service)
+* FR-01: Cho phép người dùng nhập Email; nếu Email chưa tồn tại, yêu cầu nhập Họ tên để đăng ký tài khoản mới và gửi mã Email OTP để kích hoạt.
+* FR-02: Kiểm tra Email đăng nhập; nếu Email đã tồn tại, gửi mã Email OTP để xác thực đăng nhập không mật khẩu và cấp phát cặp Access Token, Refresh Token.
+* FR-03: Yêu cầu xác thực đăng nhập và kích hoạt tài khoản thông qua mã Email OTP 6 chữ số với thời gian hết hạn cấu hình trước.
+* FR-04: Cho phép người dùng đăng nhập tức thì thông qua liên kết xác thực (Magic Link) hoặc mã OTP gửi về Email mà không cần mật khẩu.
+* FR-05: Cho phép người dùng cập nhật thông tin hồ sơ cá nhân (họ tên, ảnh đại diện, ngôn ngữ giao diện) và đơn vị tiền tệ hiển thị mặc định (VND, USD).
+* FR-06: Liệt kê danh sách phiên/thiết bị đang hoạt động; hỗ trợ thu hồi Refresh Token và đăng xuất từ xa.
+4.1.2 Dịch vụ Tài chính Cốt lõi (finance-core-service)
+* FR-07: Cho phép tạo, chỉnh sửa, xóa khoản thu hoặc chi với các thông tin: số tiền (> 0), loại giao dịch (Thu/Chi), danh mục, ngày giờ và ghi chú.
+* FR-08: Cung cấp bộ lọc tìm kiếm đa tiêu chí theo khoảng thời gian (ngày, tuần, tháng, năm), danh mục, loại thu/chi và từ khóa ghi chú.
+* FR-09: Cho phép thiết lập lịch lặp tự động (ngày, tuần, tháng) cho các khoản cố định (tiền phòng trọ, tiền mạng, lương) để hệ thống tự động sinh bản ghi đúng chu kỳ.
+* FR-13: Cho phép cấu hình hạn mức chi tiêu tối đa theo từng danh mục hoặc tổng chi tiêu cho chu kỳ tuần, tháng hoặc năm.
+* FR-14: Tự động tổng hợp số tiền đã chi, tính toán tỷ lệ % tiêu dùng và hạn mức còn lại theo thời gian thực ngay khi giao dịch được phát sinh/chỉnh sửa trong dịch vụ.
+* FR-15: Tự động nhận diện khi tỷ lệ tiêu dùng chạm hoặc vượt các mốc cảnh báo (80%, 90%, 100%) để trực tiếp gọi REST API sang notification-service gửi thông báo.
+* FR-16: Lưu trữ kết quả chi tiêu và mức độ tuân thủ hạn mức ngân sách qua từng chu kỳ để người dùng tra cứu.
+4.1.3 Dịch vụ Danh mục (category-service)
+* FR-10: Cho phép System Admin khởi tạo và duy trì bộ danh mục thu chi mặc định chuẩn hóa (Ăn uống, Mua sắm, Di chuyển, Lương, Giải trí,...) cho người dùng mới.
+* FR-11: Cho phép người dùng tự tạo mới, chỉnh sửa tên, icon, màu sắc và phân cấp danh mục Cha - Con theo nhu cầu cá nhân.
+* FR-12: Hỗ trợ ẩn/lưu trữ (Soft Delete) danh mục không còn sử dụng mà vẫn giữ nguyên tính toàn vẹn dữ liệu cho các giao dịch lịch sử gắn với danh mục đó.
+4.1.5 Dịch vụ Báo cáo & Thống kê (analytics-service)
+* FR-17: Tính toán tổng thu, tổng chi và mức chênh lệch thặng dư/thâm hụt theo khoảng thời gian tùy chọn.
+* FR-18: Tạo lập biểu đồ tròn cơ cấu chi tiêu theo danh mục và biểu đồ cột/đường biến động thu chi giữa các chu kỳ.
+* FR-19: Bóc tách danh mục chiếm tỷ trọng chi tiêu cao nhất và xác định ngày có biến động chi tiêu đột biến trong kỳ.
+* FR-20: Xuất bảng kê giao dịch và báo cáo tài chính tổng hợp ra định dạng PDF, XLSX hoặc CSV.
+4.1.6 Dịch vụ Tệp đính kèm (attachment-service)
+* FR-21: Cho phép người dùng đính kèm ảnh chụp hóa đơn (JPEG, PNG) hoặc tệp PDF (tối đa 10MB) vào giao dịch.
+* FR-22: Đẩy tệp chứng từ lên Cloud Object Storage (MinIO/S3) và cung cấp cơ chế Presigned URL có thời hạn ngắn để xem/tải an toàn.
+* FR-23: Hiển thị tệp chứng từ đính kèm theo giao dịch và xóa tệp trên kho lưu trữ khi người dùng gỡ bỏ.
+4.1.7 Dịch vụ Quét hóa đơn tự động (ocr-service)
+* FR-24: Tiếp nhận ảnh hóa đơn (JPEG, PNG) và gọi External OCR / Vision API để bóc tách dữ liệu cấu trúc (JSON) gồm: Số tiền, Ngày giao dịch và Đơn vị phát hành.
+* FR-25: Ánh xạ nội dung hóa đơn bóc tách được để đề xuất danh mục chi tiêu phù hợp và tự động điền sẵn vào biểu mẫu tạo giao dịch.
+4.1.8 Dịch vụ Thông báo (notification-service)
+* FR-26: Tự động gửi Email và thông báo trong ứng dụng nhắc người dùng cập nhật sổ thu chi theo khung giờ đã cấu hình.
+* FR-27: Cung cấp endpoint REST API để tiếp nhận yêu cầu từ finance-core-service nhằm gửi Email và thông báo cảnh báo vượt hạn mức ngân sách hoặc nhắc lịch giao dịch định kỳ.
+* FR-28: Lưu trữ danh sách thông báo trên giao diện Web App (Notification Center), đẩy thông báo thời gian thực qua kết nối WebSocket/SSE và hỗ trợ người dùng xem chi tiết, đánh dấu đã đọc hoặc xóa thông báo.
+   * 5. Quy tắc Nghiệp vụ (Business Rules)
+
+
+Mã BR
+	Quy tắc nghiệp vụ
+	BR-01
+	Địa chỉ Email đăng ký tài khoản phải là duy nhất trên toàn hệ thống.
+	BR-02
+	Quy trình đăng ký và đăng nhập hoàn toàn không sử dụng mật khẩu; việc xác thực bắt buộc dựa trên mã Email OTP hợp lệ gửi tới Email người dùng.
+	BR-03
+	Tài khoản chưa hoàn tất đăng ký/kích hoạt qua Email OTP hoặc bị khóa tạm thời sẽ bị từ chối cấp phát phiên làm việc JWT.
+	BR-04
+	Số tiền phát sinh trong mọi giao dịch thu/chi bắt buộc phải là số dương lớn hơn  ().
+	BR-05
+	Khi một giao dịch được ghi nhận, chỉnh sửa hoặc xóa bỏ, finance-core-service trực tiếp tính toán và cập nhật tiến độ ngân sách liên quan trong cùng giao dịch cơ sở dữ liệu (Database Transaction), đảm bảo tính toàn vẹn dữ liệu tức thì.
+	BR-06
+	Không cho phép xóa cứng (hard delete) các danh mục đã từng phát sinh giao dịch trong quá khứ; chỉ hỗ trợ chuyển sang trạng thái ẩn (soft delete/archive) để bảo vệ tính toàn vẹn dữ liệu.
+	BR-07
+	Khi tổng chi tiêu của một danh mục đạt hoặc vượt các mốc 80%, 90% và 100% hạn mức ngân sách, finance-core-service phải chủ động gọi REST API đến notification-service để gửi thông báo cảnh báo kịp thời.
+	BR-08
+	Tệp đính kèm chứng từ chỉ chấp nhận định dạng ảnh (JPEG, PNG) hoặc tài liệu PDF với dung lượng tối đa không vượt quá 10MB/tệp.
+	BR-09
+	Mọi thao tác truy vấn dữ liệu tài chính (giao dịch, ngân sách, báo cáo) bắt buộc phải kiểm tra quyền sở hữu (userId) của người tạo yêu cầu; tuyệt đối không để lộ dữ liệu chéo giữa các người dùng.
+	6. Danh mục Use Case
+Mã UC
+	Tên Use Case
+	Tác nhân chính
+	Dịch vụ phụ trách
+	UC-01
+	Đăng ký & Kích hoạt không mật khẩu
+	User
+	auth-service
+	UC-02
+	Đăng nhập không mật khẩu qua Email OTP
+	User, System Admin
+	auth-service
+	UC-03
+	Quản lý & Tra cứu giao dịch
+	User, Automated Task Worker
+	finance-core-service
+	UC-04
+	Ghi chép giao dịch thu/chi
+	User, Automated Task Worker
+	finance-core-service
+	UC-05
+	Thiết lập giao dịch định kỳ
+	User, Automated Task Worker
+	finance-core-service
+	UC-06
+	Quản lý danh mục thu chi
+	User, System Admin
+	category-service
+	UC-07
+	Thiết lập & Giám sát ngân sách
+	User, Automated Task Worker
+	finance-core-service
+	UC-08
+	Xem biểu đồ & Xuất báo cáo tài chính
+	User
+	analytics-service
+	UC-09
+	Tải lên & Quản lý hóa đơn chứng từ
+	User, External Services
+	attachment-service
+	UC-10
+	Quét & Đọc thông tin hóa đơn (OCR)
+	User, External Services
+	ocr-service
+	UC-11
+	Nhận & Quản lý thông báo cảnh báo
+	User, Automated Task Worker, External Services
+	notification-service
+	7. Chi tiết các Use Case cốt lõi
+UC-02 — Đăng nhập & Xác thực hệ thống
+* Tác nhân: User, System Admin
+* Sự kiện kích hoạt: Người dùng nhập địa chỉ Email trên giao diện đăng nhập.
+* Điều kiện tiên quyết: Địa chỉ Email hợp lệ và dịch vụ gửi Email đang hoạt động bình thường.
+* Điều kiện sau: Cấp phát thành công JWT Token (Access Token & Refresh Token) và thiết lập phiên làm việc.
+* Luồng sự kiện chính:
+   * Hệ thống kiểm tra sự tồn tại của Email trong cơ sở dữ liệu.
+   * Nếu Email đã tồn tại, auth-service tạo mã Email OTP và gửi đến Email của người dùng; nếu Email chưa tồn tại, yêu cầu người dùng nhập Họ tên để hoàn tất đăng ký trước khi gửi OTP.
+   * Người dùng nhập mã Email OTP; hệ thống xác thực mã OTP, tạo mới phiên đăng nhập và sinh cặp token JWT trả về cho client.
+   * Cấp quyền truy cập tương ứng với vai trò của người dùng.
+* Luồng thay thế / Ngoại lệ:
+   * Mã Email OTP sai hoặc hết hạn: Hệ thống từ chối đăng nhập và phát thông báo yêu cầu gửi lại mã OTP mới.
+   * Tài khoản bị khóa: Hệ thống từ chối cấp mã OTP và thông báo tài khoản bị khóa tạm thời.
+UC-04 — Ghi chép giao dịch thu/chi
+* Tác nhân: User, Automated Task Worker
+* Sự kiện kích hoạt: Người dùng điền và gửi biểu mẫu giao dịch mới trên ứng dụng (hoặc tiến trình tự động sinh giao dịch định kỳ đến hạn).
+* Điều kiện tiên quyết: Người dùng đã đăng nhập hợp lệ và chọn danh mục đang hoạt động.
+* Điều kiện sau: Bản ghi giao dịch được lưu trữ và tiến độ ngân sách được cập nhật.
+* Luồng sự kiện chính:
+   * Hệ thống xác thực tính hợp lệ của dữ liệu đầu vào (, ngày hợp lệ).
+   * finance-core-service lưu trữ bản ghi giao dịch mới vào cơ sở dữ liệu.
+   * Hệ thống kiểm tra và thực hiện liên kết tệp/hóa đơn đính kèm (nếu có) thông qua attachment-service.
+   * Hệ thống trực tiếp tính toán và cập nhật chi tiêu ngân sách tức thì trong cùng giao dịch cơ sở dữ liệu của finance-core-service.
+   * Trả về thông báo ghi nhận thành công cho người dùng.
+   * Luồng thay thế / Ngoại lệ:
+   * Số tiền không hợp lệ (): Báo lỗi và yêu cầu nhập lại số tiền hợp lệ.
+   * Danh mục không tồn tại hoặc đã bị ẩn (Soft Delete): Hủy bỏ giao dịch và thông báo cho người dùng.
+UC-07 — Thiết lập & Giám sát ngân sách
+      * Tác nhân: User, Automated Task Worker
+      * Sự kiện kích hoạt: Người dùng cấu hình hạn mức chi tiêu mới hoặc có giao dịch chi tiêu mới phát sinh.
+      * Điều kiện tiên quyết: Người dùng đã đăng nhập; danh mục chọn áp dụng ngân sách đang hoạt động.
+      * Điều kiện sau: Hạn mức được kích hoạt; tỷ lệ sử dụng được tính toán liên tục.
+      * Luồng sự kiện chính:
+      * Người dùng chọn danh mục, chu kỳ (tuần/tháng/năm) và nhập số tiền hạn mức tối đa.
+      * finance-core-service lưu trữ hạn mức và tổng hợp mức đã chi trong kỳ trực tiếp từ bảng giao dịch trong cùng cơ sở dữ liệu.
+      * Khi tạo hoặc cập nhật giao dịch mới, finance-core-service tính toán lại tỷ lệ chi tiêu % và hạn mức còn lại.
+      * Nếu tỷ lệ chi tiêu chạm hoặc vượt các mốc cảnh báo (80%, 90%, 100%), finance-core-service gọi REST API đồng bộ sang notification-service để thực hiện gửi thông báo.
+      * Luồng thay thế / Ngoại lệ:
+      * Hạn mức ngân sách trùng lặp cho cùng một danh mục trong cùng chu kỳ: Hệ thống nhắc nhở cập nhật hạn mức cũ thay vì tạo mới.
+UC-10 — Quét & Đọc thông tin hóa đơn (OCR)
+      * Tác nhân: User, External Services
+      * Sự kiện kích hoạt: Người dùng tải lên ảnh hóa đơn khi nhập giao dịch hoặc chọn tính năng quét hóa đơn tự động.
+      * Điều kiện tiên quyết: Tệp ảnh hóa đơn thuộc định dạng hợp lệ (JPEG, PNG) và dịch vụ ocr-service đang hoạt động.
+      * Điều kiện sau: Các thông tin số tiền, ngày phát sinh, tên nhà cung cấp và gợi ý danh mục được bóc tách và điền tự động vào biểu mẫu giao dịch.
+      * Luồng sự kiện chính:
+      * Người dùng tải ảnh hóa đơn lên hệ thống (kết nối <<include>> với UC-09: Tải lên & Quản lý hóa đơn chứng từ).
+      * ocr-service gửi tệp ảnh sang External Vision / OCR API để phân tích.
+      * External API trả về kết quả dạng JSON chứa các trường dữ liệu được bóc tách (Số tiền, Ngày giao dịch, Nhà cung cấp).
+      * ocr-service xử lý kết quả JSON và ánh xạ đề xuất danh mục thu chi tương ứng.
+      * Tự động điền thông tin vào giao diện ghi chép thu/chi (kết nối <<extend>> vào UC-04) để người dùng xem lại và xác nhận.
+      * Luồng thay thế / Ngoại lệ:
+      * Ảnh mờ hoặc gọi External API quá thời gian chờ (Timeout): Hệ thống phát thông báo không thể bóc tách dữ liệu và chuyển hướng người dùng nhập thủ công thông tin giao dịch.
+8. Yêu cầu Dữ liệu (Data Entities)
+
+
+Thực thể (Entity)
+	Cấu trúc thuộc tính tối thiểu bắt buộc
+	User
+	userId, fullName, email, status, role, currency, createdAt, updatedAt
+	Session
+	sessionId, userId, refreshToken, deviceInfo, ipAddress, status, expiresAt, createdAt
+	Transaction
+	transactionId, userId, categoryId, attachmentId (nullable), amount, type, transactionDate, note, isRecurring, status, createdAt, updatedAt
+	Category
+	categoryId, userId (null nếu mặc định), name, type (INCOME, EXPENSE), icon, color, parentId, isArchived, createdAt
+	RecurringRule
+	recurringId, userId, transactionTemplateId, frequency (DAILY, WEEKLY, MONTHLY), nextRunDate, isActive
+	Budget
+	budgetId, userId, categoryId, amountLimit, period (WEEK, MONTH, YEAR), startDate, endDate, createdAt
+	Attachment
+	attachmentId, transactionId, fileName, fileType, fileSize, storageKey, storageProvider (MINIO, S3), createdAt
+	Notification
+	notificationId, userId, type (BUDGET_WARNING, REMINDER), title, content, isRead, createdAt
+	Yêu cầu toàn vẹn dữ liệu:
+      * Khóa chính (Primary Key) phải là các UUID duy nhất.
+      * Ràng buộc toàn vẹn tham chiếu logic (qua categoryId và userId) giữa các cơ sở dữ liệu độc lập theo nguyên tắc Database-per-Service. Các thực thể Transaction và Budget chung cơ sở dữ liệu tài chính (finance DB) có thể duy trì các ràng buộc khóa ngoại (Foreign Key) trực tiếp.
+9. Yêu cầu Giao diện bên ngoài
+      * 9.1 Giao diện người dùng Web App (Modern Web Application Frontend UI):
+      * Màn hình Nhập Email / Nhập Họ tên đăng ký / Nhập Email OTP đăng nhập trên nền tảng Web App hỗ trợ Responsive đa thiết bị (Desktop, Tablet, Mobile Browser).
+      * Dashboard tổng quan tài chính Web App: tổng thu/chi, biểu đồ tương tác thu/chi theo tháng và tiến độ ngân sách.
+      * Màn hình sổ giao dịch với bộ lọc tìm kiếm linh hoạt và hỗ trợ phân trang dữ liệu.
+      * Giao diện biểu mẫu thêm mới thu/chi có tính năng tải ảnh hóa đơn và tự động điền từ OCR.
+      * Trung tâm thông báo (Notification Center) tích hợp trên giao diện Web App, hiển thị tức thì các thông điệp cảnh báo vượt ngân sách và nhắc nhở nhờ truyền nhận dữ liệu thời gian thực.
+      * 9.2 Giao diện Lưu trữ Đối tượng (Object Storage Interface):
+      * Tương thích chuẩn API S3 (Amazon S3 / MinIO) cho tác vụ lưu trữ và truy xuất ảnh chứng từ qua Presigned URL.
+      * 9.3 Giao diện Tích hợp Nội bộ & Truyền nhận Thời gian thực (Real-time Protocols & APIs):
+      * RESTful API đồng bộ (HTTP/HTTPS) qua API Gateway kết nối Web App đến các Microservices và giao tiếp nội bộ giữa các dịch vụ có cơ chế retry và timeout xử lý lỗi.
+      * Giao thức kết nối song công thời gian thực (WebSocket / Server-Sent Events - SSE): Kết nối persistent giữa trình duyệt Web App với notification-service để chủ động đẩy (push) thông báo cảnh báo và nhắc nhở lên Notification Center ngay khi phát sinh sự kiện mà không cần người dùng tải lại trang.
+      * Màn hình Nhập Email / Nhập Họ tên đăng ký / Nhập Email OTP đăng nhập hỗ trợ Responsive đa nền tảng.
+      * Dashboard tổng quan tài chính: tổng thu/chi, biểu đồ thu/chi theo tháng và tiến độ ngân sách.
+      * Màn hình sổ giao dịch với bộ lọc tìm kiếm linh hoạt và hỗ trợ phân trang.
+      * Giao diện biểu mẫu thêm mới thu/chi có tính năng tải ảnh hóa đơn và tự động điền từ OCR.
+      * Trung tâm thông báo (Notification Center) và màn hình cài đặt hạn mức ngân sách.
+      * 9.2 Giao diện Lưu trữ Đối tượng (Object Storage Interface):
+      * Tương thích chuẩn API S3 (Amazon S3 / MinIO) cho tác vụ lưu trữ và truy xuất ảnh chứng từ qua Presigned URL.
+      * 9.3 Giao diện Tích hợp Nội bộ & Xử lý Thời gian thực:
+      * RESTful API đồng bộ (HTTP/HTTPS) qua API Gateway kết nối Client đến các Microservices và giao tiếp trực tiếp giữa các Microservices nội bộ với nhau (auth-service, finance-core-service, category-service, analytics-service, attachment-service, ocr-service, notification-service) có cơ chế retry và timeout xử lý lỗi.
+      * RESTful API kết nối ocr-service với External Vision / OCR API và dịch vụ SMTP/Email gửi OTP cùng cảnh báo tới người dùng.
+10. Yêu cầu Phi chức năng
+
+
+Mã YC
+	Tên yêu cầu
+	Mô tả chi tiết
+	NFR-01
+	Hiệu năng (Performance)
+	Thời gian phản hồi cho các thao tác đọc/ghi giao dịch thông thường phải dưới 500ms; thời gian phản hồi của dịch vụ OCR trích xuất thông tin hóa đơn không vượt quá 3–5 giây trong điều kiện mạng bình thường.
+	NFR-02
+	Khả năng mở rộng (Scalability)
+	Các vi dịch vụ độc lập có khả năng mở rộng ngang (Horizontal Scaling) qua container (Docker/Kubernetes) khi lượng người dùng đồng thời tăng đột biến.
+	NFR-03
+	Tính sẵn sàng (Availability)
+	Đạt tỷ lệ uptime tối thiểu 99.5%; sự cố gián đoạn tại ocr-service hoặc attachment-service không được làm ngưng trệ việc ghi chép sổ thu chi cốt lõi.
+	NFR-04
+	Độ tin cậy & Toàn vẹn (Reliability)
+	Dữ liệu giao dịch tài chính tuyệt đối không bị thất thoát hoặc sai lệch; áp dụng cơ chế sao lưu dữ liệu tự động định kỳ.
+	NFR-05
+	Bảo mật (Security)
+	Xác thực không mật khẩu an toàn dựa trên Email OTP có giới hạn thời gian và số lần thử; toàn bộ kết nối API bắt buộc truyền qua HTTPS/TLS; token JWT được ký và bảo vệ an toàn.
+	NFR-06
+	Phân quyền & Cách ly dữ liệu (Isolation)
+	Người dùng chỉ có quyền truy cập và thao tác với các bản ghi tài chính thuộc quyền sở hữu cá nhân (userId) của mình.
+	NFR-07
+	Khả năng sử dụng (Usability)
+	Thao tác ghi nhanh giao dịch mới được tối ưu hóa để hoàn thành trong dưới 3 lượt chạm/nhấp chuột.
+	NFR-08
+	Khả năng tương thích (Compatibility)
+	Hoạt động trơn tru trên các trình duyệt web hiện đại (Chrome, Firefox, Safari, Edge) và giao diện di động.
+	11. Giả định và Ràng buộc
+
+
+Mã Ràng buộc
+	Mô tả chi tiết
+	AC-01
+	Người dùng có thể sử dụng đồng thời một tài khoản trên nhiều thiết bị (Mobile Browser, Web Browser).
+	AC-02
+	Hệ thống hoạt động trực tuyến và kết nối API ổn định với các dịch vụ bên ngoài (External OCR / Vision API, Cloud Storage MinIO/S3, Email Service).
+	AC-03
+	Mô hình kiến trúc ứng dụng được chia tách thành các microservices độc lập theo đúng tài liệu thiết kế.
+	AC-04
+	Hệ thống hoạt động theo mô hình sổ ghi chép thu chi cá nhân độc lập, không kết nối trực tiếp tài khoản ngân hàng thực tế; đơn vị tiền tệ mặc định (VND, USD) phục vụ định dạng hiển thị và xuất báo cáo.
+	12. Tiêu chí Chấp nhận
+
+
+Phân vùng chức năng
+	Tiêu chí chấp nhận bàn giao
+	Xác thực (Auth)
+	Đăng ký (Email + Họ tên), xác thực Email OTP không mật khẩu, đăng nhập JWT và đăng xuất từ xa hoạt động ổn định và chính xác theo phân quyền.
+	Giao dịch (Transaction)
+	Thêm, sửa, xóa, tìm kiếm và sinh giao dịch định kỳ hoạt động chuẩn xác và trực tiếp cập nhật dữ liệu ngân sách trong cùng cơ sở dữ liệu của finance-core-service.
+	Danh mục (Category)
+	Tạo mới, đổi màu/icon và phân cấp danh mục mượt mà; các danh mục đã ẩn (Soft Delete) vẫn hiển thị đúng trên giao dịch lịch sử.
+	Ngân sách (Budget)
+	Thiết lập ngân sách thành công; tự động tính phần trăm tiêu thụ theo thời gian thực và kích hoạt cảnh báo chính xác khi chạm ngưỡng.
+	Báo cáo (Report)
+	Dữ liệu biểu đồ trực quan, số liệu thống kê thu/chi khớp hoàn toàn với tổng giao dịch; xuất file PDF/Excel/CSV không bị lỗi font.
+	Lưu trữ & OCR
+	Tải lên hóa đơn và sinh Presigned URL an toàn; dịch vụ ocr-service gọi External API trích xuất thông tin hóa đơn chính xác.
+	Thông báo (Notification)
+	Nhận thông báo cảnh báo ngân sách thời gian thực qua WebSocket/SSE trên giao diện Web App (Notification Center) và qua Email đúng theo ngưỡng và lịch trình đã cấu hình.
+	13. Tóm tắt Ma trận Truy xuất Yêu cầu
+(Đã cập nhật lại dải mã FR-01  FR-28 và cột Tác nhân chính khớp hoàn toàn với Mục 4)
+
+
+Miền chức năng / Dịch vụ
+	Phạm vi Yêu cầu Chức năng
+	Tác nhân chính
+	Authentication (auth-service)
+	FR-01  FR-06
+	User, System Admin
+	Finance Core (finance-core-service)
+	FR-07  FR-09, FR-13  FR-16
+	User, Automated Task Worker
+	Category (category-service)
+	FR-10  FR-12
+	User, System Admin
+	
+
+	
+
+	
+
+	Analytics & Report (analytics-service)
+	FR-17  FR-20
+	User
+	Attachment (attachment-service)
+	FR-21  FR-23
+	User, External Services
+	Optical Character Recognition (ocr-service)
+	FR-24  FR-25
+	User, External Services
+	Notification (notification-service)
+	FR-26  FR-28
+	User, Automated Task Worker, External Services
+	
+
+
+
+
+
+14. Danh mục Sơ đồ Thiết kế (Diagrams)
+
+
+Nhóm sơ đồ
+	Số lượng
+	Tên cụ thể từng sơ đồ
+	Nội dung thể hiện cốt lõi
+	1. Use Case Diagram (Phân tích chức năng)
+	1
+	Sơ đồ Use Case Tổng quát (System Use Case)
+	Thể hiện 4 tác nhân (User, System Admin kế thừa từ User, Automated Task Worker, External Services) cùng toàn bộ 11 Use Case (UC-01 → UC-11), bao gồm quan hệ <<include>> (UC-10 với UC-09) và <<extend>> (UC-10 với UC-04).
+	2. Architecture Diagram (Kiến trúc hệ thống)
+	1
+	Sơ đồ Kiến trúc Microservices (System Architecture)
+	Thể hiện luồng đi từ Client → API Gateway → 7 Microservices độc lập (với finance-core-service hợp nhất giao dịch & ngân sách) → 5 Database riêng + Redis + MinIO/S3 + Cron Job Scheduler + External Services, kết nối qua RESTful API (HTTP/HTTPS).
+	3. ERD (Thiết kế dữ liệu)
+	5
+	1. ERD auth-service
+2. ERD finance-core-service (Transaction, Budget, RecurringRule)
+3. ERD category-service
+4. ERD attachment-service
+5. ERD notification-service
+2. ERD transaction-service
+3. ERD category-service
+4. ERD budget-service
+5. ERD attachment-service
+
+
+	Thể hiện nguyên tắc Database-per-Service: các DB độc lập liên kết qua Logical Reference (userId, categoryId, transactionId,...). Các service analytics-service và ocr-service không dùng DB riêng.
+	4. Sequence Diagram (Thiết kế tương tác)
+	4
+	1. SD-01: Đăng nhập & Xác thực JWT (UC-02)
+2. SD-02: Quét hóa đơn OCR & MinIO/S3 (UC-10 & UC-09)
+3. SD-03: Ghi chép & Tự động tính toán ngân sách nội bộ (UC-04 & UC-07)
+4. SD-04: Sinh giao dịch định kỳ Cron Job (FR-09)
+	Chứng minh luồng giao tiếp RESTful API giữa các dịch vụ (finance-core-service → notification-service khi chạm ngưỡng ngân sách) và xử lý ngoại lệ/timeout.
+	5. Activity Diagram (Luồng nghiệp vụ)
+	3
+	1. AD-01: Luồng Xác thực Không mật khẩu & Email OTP
+2. AD-02: Luồng Quét OCR & Nhập giao dịch
+3. AD-03: Luồng Ngân sách & Cảnh báo đa ngưỡng
+	Mô tả chi tiết các điều kiện rẽ nhánh (if/else), kiểm tra quy tắc nghiệp vụ (BR-03, BR-04, BR-07, BR-08) và luồng xử lý lỗi.
+	6. Deployment Diagram (Triển khai)
+	1
+	Sơ đồ Triển khai Container (Docker Deployment)
+	Thể hiện cấu trúc đóng gói thực tế trong môi trường Docker Compose (Frontend, Gateway, 7 Services, các DB, Redis, MinIO và kết nối External API).
