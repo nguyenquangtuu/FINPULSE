@@ -1,16 +1,28 @@
-from pydantic import BaseModel, EmailStr, Field
+import re
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import datetime
 
-class RegisterRequest(BaseModel):
-    email: EmailStr
+EMAIL_REGEX = re.compile(r"^[\w\.\+\-]+@[a-zA-Z0-9\.\-]+\.[a-zA-Z0-9\.\-]+$")
+
+class EmailBase(BaseModel):
+    email: str = Field(..., description="Địa chỉ email")
+
+    @field_validator("email")
+    @classmethod
+    def validate_email_format(cls, v: str) -> str:
+        v = v.strip().lower()
+        if not EMAIL_REGEX.match(v):
+            raise ValueError("Địa chỉ email không đúng định dạng")
+        return v
+
+class RegisterRequest(EmailBase):
     full_name: str = Field(..., min_length=2, max_length=150)
 
-class LoginRequest(BaseModel):
-    email: EmailStr
+class LoginRequest(EmailBase):
+    pass
 
-class VerifyOtpRequest(BaseModel):
-    email: EmailStr
+class VerifyOtpRequest(EmailBase):
     otp_code: str = Field(..., min_length=6, max_length=6)
     device_info: Optional[str] = "Web Browser"
 
