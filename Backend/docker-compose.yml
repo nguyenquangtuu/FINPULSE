@@ -45,6 +45,18 @@ services:
     networks:
       - finpulse-net
 
+  frontend:
+    build:
+      context: ../Frontend
+    container_name: finpulse-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api-gateway
+    networks:
+      - finpulse-net
+
   api-gateway:
     build:
       context: ./api-gateway
