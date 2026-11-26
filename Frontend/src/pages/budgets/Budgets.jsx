@@ -13,6 +13,7 @@ import { formatCurrency, formatDate } from '../../utils/formatters';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { CurrencyInput } from '../../components/common/CurrencyInput';
 import { Select } from '../../components/common/Select';
 import { Modal } from '../../components/common/Modal';
 
@@ -272,14 +273,12 @@ export const Budgets = () => {
             ))}
           </Select>
 
-          <Input
-            label="Hạn mức tối đa (VND)"
-            type="number"
-            step="1000"
-            min="1000"
-            placeholder="Ví dụ: 3000000"
+          <CurrencyInput
+            label="Hạn mức tối đa"
+            placeholder="Ví dụ: 3.000.000"
             value={amountLimit}
             onChange={(e) => setAmountLimit(e.target.value)}
+            quickPresets
             required
           />
 

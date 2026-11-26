@@ -15,6 +15,7 @@ import { formatCurrency, formatDate } from '../../utils/formatters';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { CurrencyInput } from '../../components/common/CurrencyInput';
 import { Select } from '../../components/common/Select';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
@@ -303,14 +304,12 @@ export const RecurringTransactions = () => {
             required
           />
 
-          <Input
-            label="Số tiền phát sinh (VND)"
-            type="number"
-            min="1000"
-            step="1000"
-            placeholder="Ví dụ: 3500000"
+          <CurrencyInput
+            label="Số tiền phát sinh"
+            placeholder="Ví dụ: 3.500.000"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
+            quickPresets
             required
           />
 

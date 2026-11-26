@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Modal } from '../../components/common/Modal';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { CurrencyInput } from '../../components/common/CurrencyInput';
 import { Select } from '../../components/common/Select';
 import { Upload, X, FileText, CheckCircle2 } from 'lucide-react';
 import api from '../../services/api';
@@ -166,15 +167,13 @@ export const TransactionModal = ({ isOpen, onClose, onSuccess, initialData = nul
           </div>
         </div>
 
-        {/* Amount Input */}
-        <Input
-          label="Số tiền (VND)"
-          type="number"
-          step="any"
-          min="1"
-          placeholder="Ví dụ: 150000"
+        {/* Amount Input with VNĐ Formatting */}
+        <CurrencyInput
+          label="Số tiền giao dịch"
+          placeholder="Ví dụ: 50.000"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
+          quickPresets
           required
         />
 

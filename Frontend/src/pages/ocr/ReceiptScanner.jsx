@@ -17,6 +17,7 @@ import { formatCurrency } from '../../utils/formatters';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
+import { CurrencyInput } from '../../components/common/CurrencyInput';
 import { Select } from '../../components/common/Select';
 import { useNavigate } from 'react-router-dom';
 
@@ -257,11 +258,12 @@ export const ReceiptScanner = () => {
                 required
               />
 
-              <Input
-                label="Số tiền phát sinh (VND)"
-                type="number"
+              <CurrencyInput
+                label="Số tiền phát sinh"
+                placeholder="Ví dụ: 50.000"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
+                quickPresets
                 required
               />
 
