@@ -12,15 +12,16 @@ router = APIRouter()
 async def get_categories(
     type: Optional[str] = Query(None, pattern="^(INCOME|EXPENSE)$"),
     format: Optional[str] = Query("tree", pattern="^(tree|flat)$"),
+    include_archived: bool = Query(False),
     claims: dict = Depends(get_current_user_claims),
 ):
     if format == "flat":
-        categories = await CategoryRepository.list_for_user(claims["sub"], type)
+        categories = await CategoryRepository.list_for_user(claims["sub"], type, include_archived=include_archived)
         for c in categories:
             c["is_system"] = c["user_id"] is None
         return success(data=categories)
     
-    tree = await CategoryService.get_categories_tree(claims["sub"], type)
+    tree = await CategoryService.get_categories_tree(claims["sub"], type, include_archived=include_archived)
     return success(data=tree)
 
 @router.get("/{category_id}")
@@ -62,6 +63,15 @@ async def delete_category(category_id: str, claims: dict = Depends(get_current_u
         user_role=claims.get("role", "USER"),
     )
     return success(message="Lưu trữ ẩn danh mục thành công (Soft Delete)")
+
+@router.post("/{category_id}/restore")
+async def restore_category(category_id: str, claims: dict = Depends(get_current_user_claims)):
+    await CategoryService.restore_category(
+        category_id=category_id,
+        user_id=claims["sub"],
+        user_role=claims.get("role", "USER"),
+    )
+    return success(message="Khôi phục danh mục thành công")
 
 # --- Internal Inter-Service Endpoints ---
 @router.get("/internal/{category_id}", dependencies=[Depends(verify_internal_key)])

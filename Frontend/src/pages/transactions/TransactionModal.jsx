@@ -187,7 +187,7 @@ export const TransactionModal = ({ isOpen, onClose, onSuccess, initialData = nul
           <option value="">-- Chọn danh mục --</option>
           {filteredCategories.map((c) => (
             <option key={c.category_id} value={c.category_id}>
-              {c.name} {c.is_system ? '(Hệ thống)' : '(Tùy chỉnh)'}
+              {c.parent_id ? `↳ ${c.name}` : c.name}
             </option>
           ))}
         </Select>

@@ -74,3 +74,9 @@ class CategoryRepository:
         async with db_pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute("UPDATE categories SET is_archived = TRUE WHERE category_id = %s", (category_id,))
+
+    @staticmethod
+    async def restore(category_id: str):
+        async with db_pool.acquire() as conn:
+            async with conn.cursor() as cur:
+                await cur.execute("UPDATE categories SET is_archived = FALSE WHERE category_id = %s", (category_id,))

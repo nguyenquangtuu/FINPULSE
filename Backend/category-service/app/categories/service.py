@@ -4,8 +4,8 @@ from app.core.errors import AppError
 
 class CategoryService:
     @staticmethod
-    async def get_categories_tree(user_id: str, category_type: Optional[str] = None) -> List[Dict[str, Any]]:
-        rows = await CategoryRepository.list_for_user(user_id, category_type)
+    async def get_categories_tree(user_id: str, category_type: Optional[str] = None, include_archived: bool = False) -> List[Dict[str, Any]]:
+        rows = await CategoryRepository.list_for_user(user_id, category_type, include_archived=include_archived)
         
         # Build tree structure
         by_id = {}
@@ -54,9 +54,7 @@ class CategoryService:
         if not category:
             raise AppError("CATEGORY_NOT_FOUND", "Không tìm thấy danh mục", status_code=404)
         
-        # Check permissions
-        if category["user_id"] is None and user_role != "ADMIN":
-            raise AppError("FORBIDDEN", "Không có quyền chỉnh sửa danh mục chuẩn của hệ thống", status_code=403)
+        # Only prevent editing another user's private category
         if category["user_id"] is not None and category["user_id"] != user_id and user_role != "ADMIN":
             raise AppError("FORBIDDEN", "Không có quyền chỉnh sửa danh mục của người dùng khác", status_code=403)
 
@@ -76,10 +74,19 @@ class CategoryService:
         if not category:
             raise AppError("CATEGORY_NOT_FOUND", "Không tìm thấy danh mục", status_code=404)
         
-        if category["user_id"] is None and user_role != "ADMIN":
-            raise AppError("FORBIDDEN", "Không thể xóa danh mục mặc định của hệ thống", status_code=403)
         if category["user_id"] is not None and category["user_id"] != user_id and user_role != "ADMIN":
             raise AppError("FORBIDDEN", "Không có quyền xóa danh mục của người dùng khác", status_code=403)
 
-        # Soft delete
+        # Soft delete (archive)
         await CategoryRepository.soft_delete(category_id)
+
+    @staticmethod
+    async def restore_category(category_id: str, user_id: str, user_role: str):
+        category = await CategoryRepository.get_by_id(category_id)
+        if not category:
+            raise AppError("CATEGORY_NOT_FOUND", "Không tìm thấy danh mục", status_code=404)
+        
+        if category["user_id"] is not None and category["user_id"] != user_id and user_role != "ADMIN":
+            raise AppError("FORBIDDEN", "Không có quyền khôi phục danh mục của người dùng khác", status_code=403)
+
+        await CategoryRepository.restore(category_id)
