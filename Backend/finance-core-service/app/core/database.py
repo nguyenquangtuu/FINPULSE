@@ -4,19 +4,35 @@ from app.core.config import settings
 
 logger = logging.getLogger("finance-core-service.db")
 
-db_pool: aiomysql.Pool | None = None
+_actual_pool: aiomysql.Pool | None = None
+
+class DBPoolProxy:
+    def acquire(self, *args, **kwargs):
+        if _actual_pool is None:
+            raise RuntimeError("Database pool has not been initialized yet")
+        return _actual_pool.acquire(*args, **kwargs)
+
+    def close(self):
+        if _actual_pool:
+            _actual_pool.close()
+
+    async def wait_closed(self):
+        if _actual_pool:
+            await _actual_pool.wait_closed()
+
+db_pool = DBPoolProxy()
 
 async def connect_db():
-    global db_pool
+    global _actual_pool
     try:
-        db_pool = await aiomysql.create_pool(
+        _actual_pool = await aiomysql.create_pool(
             host=settings.MYSQL_HOST,
             port=settings.MYSQL_PORT,
             user=settings.MYSQL_USER,
             password=settings.MYSQL_PASSWORD,
             db=settings.MYSQL_DATABASE,
             charset="utf8mb4",
-            autocommit=False, # We use explicit transactions for financial operations (ACID)
+            autocommit=False, # Explicit transactions for financial ACID
             minsize=1,
             maxsize=15,
         )
@@ -26,8 +42,8 @@ async def connect_db():
         raise e
 
 async def close_db():
-    global db_pool
-    if db_pool:
-        db_pool.close()
-        await db_pool.wait_closed()
+    global _actual_pool
+    if _actual_pool:
+        _actual_pool.close()
+        await _actual_pool.wait_closed()
         logger.info("Closed MySQL finance_db pool")

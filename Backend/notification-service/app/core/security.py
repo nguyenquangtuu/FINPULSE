@@ -15,9 +15,11 @@ def get_current_user_claims(
     if not authorization or not authorization.startswith("Bearer "):
         raise AppError("UNAUTHORIZED", "Missing authorization credentials", status_code=status.HTTP_401_UNAUTHORIZED)
     token = authorization.split(" ")[1]
+    return decode_token(token)
+
+def decode_token(token: str) -> dict:
     try:
-        claims = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
-        return claims
+        return jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
     except Exception:
         raise AppError("INVALID_TOKEN", "Invalid or expired token", status_code=status.HTTP_401_UNAUTHORIZED)
 

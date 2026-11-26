@@ -1,6 +1,7 @@
 import logging
+from typing import Optional
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -44,8 +45,11 @@ app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.add_exception_handler(Exception, generic_error_handler)
 
 app.include_router(notification_router, prefix="/api/notifications", tags=["Notifications"])
-# Include websocket router on root path as well
-app.include_router(notification_router, tags=["WebSocket"])
+
+@app.websocket("/ws")
+async def root_ws(websocket: WebSocket, token: Optional[str] = None):
+    from app.notifications.routes import websocket_notifications
+    await websocket_notifications(websocket, token)
 
 @app.get("/health")
 async def health_check():

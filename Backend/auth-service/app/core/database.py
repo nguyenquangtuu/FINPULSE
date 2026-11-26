@@ -4,12 +4,28 @@ from app.core.config import settings
 
 logger = logging.getLogger("auth-service.db")
 
-db_pool: aiomysql.Pool | None = None
+_actual_pool: aiomysql.Pool | None = None
+
+class DBPoolProxy:
+    def acquire(self, *args, **kwargs):
+        if _actual_pool is None:
+            raise RuntimeError("Database pool has not been initialized yet")
+        return _actual_pool.acquire(*args, **kwargs)
+
+    def close(self):
+        if _actual_pool:
+            _actual_pool.close()
+
+    async def wait_closed(self):
+        if _actual_pool:
+            await _actual_pool.wait_closed()
+
+db_pool = DBPoolProxy()
 
 async def connect_db():
-    global db_pool
+    global _actual_pool
     try:
-        db_pool = await aiomysql.create_pool(
+        _actual_pool = await aiomysql.create_pool(
             host=settings.MYSQL_HOST,
             port=settings.MYSQL_PORT,
             user=settings.MYSQL_USER,
@@ -26,13 +42,8 @@ async def connect_db():
         raise e
 
 async def close_db():
-    global db_pool
-    if db_pool:
-        db_pool.close()
-        await db_pool.wait_closed()
+    global _actual_pool
+    if _actual_pool:
+        _actual_pool.close()
+        await _actual_pool.wait_closed()
         logger.info("Closed MySQL auth_db pool")
-
-async def get_db_cursor():
-    if not db_pool:
-        raise RuntimeError("Database connection pool is not initialized")
-    return db_pool.acquire()
