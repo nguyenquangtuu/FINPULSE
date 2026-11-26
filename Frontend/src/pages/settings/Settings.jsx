@@ -116,7 +116,7 @@ export const Settings = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-xl font-bold tracking-tight text-text-primary">
