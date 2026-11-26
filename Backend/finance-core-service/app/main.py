@@ -1,0 +1,50 @@
+import logging
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.core.config import settings
+from app.core.database import connect_db, close_db
+from app.core.errors import (
+    AppError,
+    app_error_handler,
+    http_error_handler,
+    validation_error_handler,
+    generic_error_handler,
+)
+from app.finance.routes import router as finance_router
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] [%(name)s] %(message)s")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await connect_db()
+    yield
+    await close_db()
+
+app = FastAPI(
+    title="FINPULSE finance-core-service",
+    version="1.0.0",
+    description="Microservice tài chính cốt lõi: Giao dịch thu/chi, Ngân sách & Cảnh báo vượt ngưỡng",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.add_exception_handler(AppError, app_error_handler)
+app.add_exception_handler(HTTPException, http_error_handler)
+app.add_exception_handler(RequestValidationError, validation_error_handler)
+app.add_exception_handler(Exception, generic_error_handler)
+
+app.include_router(finance_router, prefix="/api/finance", tags=["Finance Core"])
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "service": "finance-core-service"}
