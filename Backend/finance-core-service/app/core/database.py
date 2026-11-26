@@ -32,6 +32,7 @@ async def connect_db():
             password=settings.MYSQL_PASSWORD,
             db=settings.MYSQL_DATABASE,
             charset="utf8mb4",
+            init_command="SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci",
             autocommit=False, # Explicit transactions for financial ACID
             minsize=1,
             maxsize=15,
