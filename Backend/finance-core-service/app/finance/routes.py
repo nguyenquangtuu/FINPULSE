@@ -60,6 +60,19 @@ async def get_transaction(
         raise AppError("TRANSACTION_NOT_FOUND", "Không tìm thấy giao dịch", status_code=404)
     return success(data=trans)
 
+@router.put("/transactions/{transaction_id}")
+async def update_transaction(
+    transaction_id: str,
+    payload: TransactionUpdate,
+    claims: dict = Depends(get_current_user_claims),
+):
+    updated = await FinanceService.update_transaction(
+        transaction_id=transaction_id,
+        user_id=claims["sub"],
+        payload=payload.model_dump(exclude_unset=True),
+    )
+    return success(data=updated, message="Cập nhật giao dịch thành công")
+
 @router.delete("/transactions/{transaction_id}")
 async def delete_transaction(
     transaction_id: str,
@@ -103,20 +116,35 @@ async def delete_budget(
     claims: dict = Depends(get_current_user_claims),
 ):
     await FinanceRepository.delete_budget(budget_id, claims["sub"])
-    return success(message="Xóa ngân sách thành công")
+    return success(message="Xóa hạn mức ngân sách thành công")
 
-# --- RECURRING RULES ---
+# --- RECURRING TRANSACTIONS ---
 @router.post("/recurring")
-async def create_recurring(
+async def create_recurring_rule(
     payload: RecurringRuleCreate,
     claims: dict = Depends(get_current_user_claims),
 ):
-    rule = await FinanceRepository.create_recurring_rule(claims["sub"], payload.model_dump())
-    return success(data=rule, message="Thiết lập giao dịch định kỳ thành công")
+    created = await FinanceRepository.create_recurring_rule(claims["sub"], payload.model_dump())
+    return success(data=created, message="Thiết lập giao dịch định kỳ thành công")
 
-# --- INTERNAL INTER-SERVICE ENDPOINTS ---
+@router.get("/recurring")
+async def list_recurring_rules(claims: dict = Depends(get_current_user_claims)):
+    rules = await FinanceRepository.list_recurring_rules(claims["sub"])
+    return success(data=rules)
+
+@router.delete("/recurring/{recurring_id}")
+async def delete_recurring_rule(
+    recurring_id: str,
+    claims: dict = Depends(get_current_user_claims),
+):
+    deleted = await FinanceRepository.delete_recurring_rule(recurring_id, claims["sub"])
+    if not deleted:
+        raise AppError("RULE_NOT_FOUND", "Không tìm thấy giao dịch định kỳ", status_code=404)
+    return success(message="Hủy giao dịch định kỳ thành công")
+
+# --- INTERNAL INTER-SERVICE CALLS ---
 @router.post("/internal/recurring/execute-due", dependencies=[Depends(verify_internal_key)])
-async def execute_recurring_internal():
+async def execute_due_recurring_internal():
     res = await FinanceService.execute_due_recurring()
     return success(data=res, message="Thực thi quét giao dịch định kỳ thành công")
 

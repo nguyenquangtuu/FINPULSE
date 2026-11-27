@@ -3,7 +3,9 @@ import datetime
 from typing import Optional, List, Dict, Any, Tuple
 from decimal import Decimal
 import aiomysql
+import httpx
 from app.core.database import db_pool
+from app.core.config import settings
 from app.core.errors import AppError
 
 class FinanceRepository:
@@ -69,30 +71,27 @@ class FinanceRepository:
         return items, total
 
     @staticmethod
-    async def create_transaction_atomic(user_id: str, payload: dict) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
-        """
-        Creates transaction and recalculates in-progress budgets in the SAME DB Transaction (ACID - BR-05).
-        Returns the created transaction and a list of affected budgets with threshold alert triggers (BR-07).
-        """
+    async def create_transaction_atomic(
+        user_id: str, payload: dict
+    ) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
         transaction_id = str(uuid.uuid4())
-        trans_date = payload.get("transaction_date") or datetime.datetime.now()
         amount = Decimal(str(payload["amount"]))
         trans_type = payload["type"]
         category_id = payload["category_id"]
-
+        trans_date = payload["transaction_date"]
         alerts_to_trigger = []
 
         async with db_pool.acquire() as conn:
             await conn.begin()
             try:
+                # 1. Insert Transaction
                 async with conn.cursor() as cur:
-                    # 1. Insert transaction
                     await cur.execute(
                         """
                         INSERT INTO transactions (
-                            transaction_id, user_id, category_id, attachment_id,
-                            amount, type, transaction_date, note, is_recurring, recurring_id, status
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'COMPLETED')
+                            transaction_id, user_id, category_id, attachment_id, 
+                            amount, type, transaction_date, note, is_recurring, recurring_id
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         """,
                         (
                             transaction_id,
@@ -123,79 +122,51 @@ class FinanceRepository:
         return created, alerts_to_trigger
 
     @staticmethod
-    async def _check_and_update_budgets_atomic(
-        conn, user_id: str, category_id: str, trans_date: datetime.datetime
-    ) -> List[Dict[str, Any]]:
-        alerts = []
-        date_str = trans_date.strftime("%Y-%m-%d")
-
-        async with conn.cursor(aiomysql.DictCursor) as cur:
-            # Query all active budgets for this user that cover this date (category-specific OR overall)
-            await cur.execute(
-                """
-                SELECT * FROM budgets 
-                WHERE user_id = %s 
-                  AND start_date <= %s AND end_date >= %s
-                  AND (category_id = %s OR category_id IS NULL)
-                FOR UPDATE
-                """,
-                (user_id, date_str, date_str, category_id),
-            )
-            budgets = await cur.fetchall()
-
-            for b in budgets:
-                b_cat = b["category_id"]
-                # Sum all expenses in this budget window
-                if b_cat:
+    async def update_transaction_atomic(
+        transaction_id: str, user_id: str, payload: dict
+    ) -> Tuple[Optional[Dict[str, Any]], List[Dict[str, Any]]]:
+        alerts_to_trigger = []
+        async with db_pool.acquire() as conn:
+            await conn.begin()
+            try:
+                async with conn.cursor(aiomysql.DictCursor) as cur:
                     await cur.execute(
-                        """
-                        SELECT COALESCE(SUM(amount), 0) as total_spent 
-                        FROM transactions 
-                        WHERE user_id = %s AND category_id = %s AND type = 'EXPENSE' AND status = 'COMPLETED'
-                          AND transaction_date >= %s AND transaction_date <= %s
-                        """,
-                        (user_id, b_cat, f"{b['start_date']} 00:00:00", f"{b['end_date']} 23:59:59"),
+                        "SELECT * FROM transactions WHERE transaction_id = %s AND user_id = %s FOR UPDATE",
+                        (transaction_id, user_id),
                     )
-                else:
-                    await cur.execute(
-                        """
-                        SELECT COALESCE(SUM(amount), 0) as total_spent 
-                        FROM transactions 
-                        WHERE user_id = %s AND type = 'EXPENSE' AND status = 'COMPLETED'
-                          AND transaction_date >= %s AND transaction_date <= %s
-                        """,
-                        (user_id, f"{b['start_date']} 00:00:00", f"{b['end_date']} 23:59:59"),
-                    )
-                
-                spent_row = await cur.fetchone()
-                spent = Decimal(str(spent_row["total_spent"]))
-                limit = Decimal(str(b["amount_limit"]))
-                pct = float((spent / limit) * 100) if limit > 0 else 0.0
+                    trans = await cur.fetchone()
+                    if not trans:
+                        await conn.rollback()
+                        return None, []
 
-                # Check thresholds (80%, 90%, 100%)
-                threshold_to_alert = None
-                if pct >= 100 and not b["alert_threshold_100"]:
-                    threshold_to_alert = 100
-                    await cur.execute("UPDATE budgets SET alert_threshold_100 = TRUE, alert_threshold_90 = TRUE, alert_threshold_80 = TRUE WHERE budget_id = %s", (b["budget_id"],))
-                elif pct >= 90 and not b["alert_threshold_90"]:
-                    threshold_to_alert = 90
-                    await cur.execute("UPDATE budgets SET alert_threshold_90 = TRUE, alert_threshold_80 = TRUE WHERE budget_id = %s", (b["budget_id"],))
-                elif pct >= 80 and not b["alert_threshold_80"]:
-                    threshold_to_alert = 80
-                    await cur.execute("UPDATE budgets SET alert_threshold_80 = TRUE WHERE budget_id = %s", (b["budget_id"],))
+                    updates = []
+                    params = []
+                    for field in ["category_id", "attachment_id", "amount", "type", "transaction_date", "note"]:
+                        if field in payload and payload[field] is not None:
+                            updates.append(f"{field} = %s")
+                            params.append(payload[field])
 
-                if threshold_to_alert:
-                    alerts.append({
-                        "user_id": user_id,
-                        "budget_id": b["budget_id"],
-                        "category_id": b["category_id"],
-                        "current_spent": float(spent),
-                        "amount_limit": float(limit),
-                        "percentage": round(pct, 1),
-                        "threshold": threshold_to_alert,
-                    })
+                    if updates:
+                        params.extend([transaction_id, user_id])
+                        sql = f"UPDATE transactions SET {', '.join(updates)} WHERE transaction_id = %s AND user_id = %s"
+                        await cur.execute(sql, tuple(params))
 
-        return alerts
+                    # Re-check budget if updated transaction is expense
+                    final_type = payload.get("type", trans["type"])
+                    final_cat = payload.get("category_id", trans["category_id"])
+                    final_date = payload.get("transaction_date", trans["transaction_date"])
+                    if final_type == "EXPENSE":
+                        alerts_to_trigger = await FinanceRepository._check_and_update_budgets_atomic(
+                            conn, user_id, final_cat, final_date
+                        )
+
+                await conn.commit()
+            except Exception as e:
+                await conn.rollback()
+                raise e
+
+        updated = await FinanceRepository.get_transaction(transaction_id, user_id)
+        return updated, alerts_to_trigger
 
     @staticmethod
     async def delete_transaction_atomic(transaction_id: str, user_id: str):
@@ -219,16 +190,133 @@ class FinanceRepository:
                 await conn.rollback()
                 raise e
 
+    # --- CATEGORY HIERARCHY HELPER ---
+    @staticmethod
+    async def fetch_category_hierarchy() -> Tuple[Dict[str, List[str]], Dict[str, str]]:
+        children_map: Dict[str, List[str]] = {}
+        parent_map: Dict[str, str] = {}
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                resp = await client.get(
+                    f"{settings.CATEGORY_SERVICE_URL}/api/categories/internal/all/list",
+                    headers={"X-Internal-Service-Key": settings.INTERNAL_SERVICE_KEY},
+                )
+                if resp.status_code == 200:
+                    items = resp.json().get("data", [])
+                    for item in items:
+                        cid = item["category_id"]
+                        pid = item.get("parent_id")
+                        if pid:
+                            parent_map[cid] = pid
+                            if pid not in children_map:
+                                children_map[pid] = []
+                            children_map[pid].append(cid)
+        except Exception:
+            pass
+        return children_map, parent_map
+
+    @staticmethod
+    async def _get_spent_for_cats(
+        cur, user_id: str, category_ids: List[str], start_date: Any, end_date: Any
+    ) -> Decimal:
+        if category_ids:
+            fmt = ",".join(["%s"] * len(category_ids))
+            sql = f"""
+            SELECT COALESCE(SUM(amount), 0) as total_spent 
+            FROM transactions 
+            WHERE user_id = %s AND category_id IN ({fmt}) AND type = 'EXPENSE' AND status = 'COMPLETED'
+              AND transaction_date >= %s AND transaction_date <= %s
+            """
+            params = [user_id] + list(category_ids) + [f"{start_date} 00:00:00", f"{end_date} 23:59:59"]
+            await cur.execute(sql, tuple(params))
+        else:
+            await cur.execute(
+                """
+                SELECT COALESCE(SUM(amount), 0) as total_spent 
+                FROM transactions 
+                WHERE user_id = %s AND type = 'EXPENSE' AND status = 'COMPLETED'
+                  AND transaction_date >= %s AND transaction_date <= %s
+                """,
+                (user_id, f"{start_date} 00:00:00", f"{end_date} 23:59:59"),
+            )
+        row = await cur.fetchone()
+        return Decimal(str(row["total_spent"]))
+
     # --- BUDGETS ---
+    @staticmethod
+    async def _check_and_update_budgets_atomic(
+        conn, user_id: str, category_id: str, trans_date: datetime.datetime
+    ) -> List[Dict[str, Any]]:
+        alerts = []
+        date_str = trans_date.strftime("%Y-%m-%d") if isinstance(trans_date, (datetime.datetime, datetime.date)) else str(trans_date)[:10]
+
+        children_map, parent_map = await FinanceRepository.fetch_category_hierarchy()
+        related_cat_ids = [category_id]
+        if category_id in parent_map:
+            related_cat_ids.append(parent_map[category_id])
+
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            fmt = ",".join(["%s"] * len(related_cat_ids))
+            sql = f"""
+            SELECT * FROM budgets 
+            WHERE user_id = %s 
+              AND start_date <= %s AND end_date >= %s
+              AND (category_id IN ({fmt}) OR category_id IS NULL)
+            FOR UPDATE
+            """
+            params = [user_id, date_str, date_str] + related_cat_ids
+            await cur.execute(sql, tuple(params))
+            budgets = await cur.fetchall()
+
+            for b in budgets:
+                b_cat = b["category_id"]
+                family_cat_ids = ([b_cat] + children_map.get(b_cat, [])) if b_cat else []
+                spent = await FinanceRepository._get_spent_for_cats(
+                    cur, user_id, family_cat_ids, b["start_date"], b["end_date"]
+                )
+                
+                limit = Decimal(str(b["amount_limit"]))
+                pct = float((spent / limit) * 100) if limit > 0 else 0.0
+
+                # Check thresholds (80%, 90%, 100%)
+                threshold_to_alert = None
+                if pct >= 100 and not b["alert_threshold_100"]:
+                    threshold_to_alert = 100
+                    await cur.execute("UPDATE budgets SET alert_threshold_100 = TRUE, alert_threshold_90 = TRUE, alert_threshold_80 = TRUE WHERE budget_id = %s", (b["budget_id"],))
+                elif pct >= 90 and not b["alert_threshold_90"]:
+                    threshold_to_alert = 90
+                    await cur.execute("UPDATE budgets SET alert_threshold_90 = TRUE, alert_threshold_80 = TRUE WHERE budget_id = %s", (b["budget_id"],))
+                elif pct >= 80 and not b["alert_threshold_80"]:
+                    threshold_to_alert = 80
+                    await cur.execute("UPDATE budgets SET alert_threshold_80 = TRUE WHERE budget_id = %s", (b["budget_id"],))
+
+                if threshold_to_alert:
+                    alerts.append({
+                        "user_id": user_id,
+                        "budget_id": b["budget_id"],
+                        "category_id": b["category_id"],
+                        "threshold": threshold_to_alert,
+                        "current_spent": float(spent),
+                        "amount_limit": float(limit),
+                        "percentage": round(pct, 2),
+                    })
+
+        return alerts
+
     @staticmethod
     async def get_budget(budget_id: str, user_id: str) -> Optional[Dict[str, Any]]:
         async with db_pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
-                await cur.execute("SELECT * FROM budgets WHERE budget_id = %s AND user_id = %s", (budget_id, user_id))
+                await cur.execute(
+                    "SELECT * FROM budgets WHERE budget_id = %s AND user_id = %s",
+                    (budget_id, user_id),
+                )
                 return await cur.fetchone()
 
     @staticmethod
     async def list_budgets(user_id: str) -> List[Dict[str, Any]]:
+        children_map, _ = await FinanceRepository.fetch_category_hierarchy()
+
         async with db_pool.acquire() as conn:
             async with conn.cursor(aiomysql.DictCursor) as cur:
                 await cur.execute(
@@ -237,31 +325,13 @@ class FinanceRepository:
                 )
                 budgets = await cur.fetchall()
 
-                # Calculate real-time consumption for each budget
+                # Calculate real-time consumption for each budget (including child categories)
                 for b in budgets:
                     b_cat = b["category_id"]
-                    if b_cat:
-                        await cur.execute(
-                            """
-                            SELECT COALESCE(SUM(amount), 0) as total_spent 
-                            FROM transactions 
-                            WHERE user_id = %s AND category_id = %s AND type = 'EXPENSE' AND status = 'COMPLETED'
-                              AND transaction_date >= %s AND transaction_date <= %s
-                            """,
-                            (user_id, b_cat, f"{b['start_date']} 00:00:00", f"{b['end_date']} 23:59:59"),
-                        )
-                    else:
-                        await cur.execute(
-                            """
-                            SELECT COALESCE(SUM(amount), 0) as total_spent 
-                            FROM transactions 
-                            WHERE user_id = %s AND type = 'EXPENSE' AND status = 'COMPLETED'
-                              AND transaction_date >= %s AND transaction_date <= %s
-                            """,
-                            (user_id, f"{b['start_date']} 00:00:00", f"{b['end_date']} 23:59:59"),
-                        )
-                    spent_row = await cur.fetchone()
-                    spent = Decimal(str(spent_row["total_spent"]))
+                    family_cat_ids = ([b_cat] + children_map.get(b_cat, [])) if b_cat else []
+                    spent = await FinanceRepository._get_spent_for_cats(
+                        cur, user_id, family_cat_ids, b["start_date"], b["end_date"]
+                    )
                     limit = Decimal(str(b["amount_limit"]))
                     b["spent_amount"] = spent
                     b["remaining_amount"] = max(Decimal(0), limit - spent)
@@ -378,37 +448,3 @@ class FinanceRepository:
             except Exception as e:
                 await conn.rollback()
                 raise e
-
-    @staticmethod
-    async def create_recurring_rule(user_id: str, payload: dict) -> Dict[str, Any]:
-        recurring_id = str(uuid.uuid4())
-        async with db_pool.acquire() as conn:
-            await conn.begin()
-            try:
-                async with conn.cursor() as cur:
-                    await cur.execute(
-                        """
-                        INSERT INTO recurring_rules (
-                            recurring_id, user_id, category_id, amount, type, note, frequency, next_run_date, is_active
-                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, TRUE)
-                        """,
-                        (
-                            recurring_id,
-                            user_id,
-                            payload["category_id"],
-                            payload["amount"],
-                            payload["type"],
-                            payload.get("note", ""),
-                            payload["frequency"],
-                            payload["next_run_date"],
-                        ),
-                    )
-                await conn.commit()
-            except Exception as e:
-                await conn.rollback()
-                raise e
-
-        async with db_pool.acquire() as conn:
-            async with conn.cursor(aiomysql.DictCursor) as cur:
-                await cur.execute("SELECT * FROM recurring_rules WHERE recurring_id = %s", (recurring_id,))
-                return await cur.fetchone()

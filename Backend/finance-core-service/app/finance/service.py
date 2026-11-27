@@ -24,9 +24,29 @@ class FinanceService:
         return transaction
 
     @staticmethod
+    async def update_transaction(transaction_id: str, user_id: str, payload: dict) -> dict:
+        transaction, alerts = await FinanceRepository.update_transaction_atomic(transaction_id, user_id, payload)
+        if not transaction:
+            raise AppError("TRANSACTION_NOT_FOUND", "Không tìm thấy giao dịch hoặc không có quyền thao tác", status_code=404)
+
+        for alert in alerts:
+            try:
+                await FinanceService._dispatch_budget_alert(alert)
+            except Exception as e:
+                logger.warning(f"Failed to dispatch budget alert to notification-service: {e}")
+
+        return transaction
+
+    @staticmethod
+    async def delete_transaction(transaction_id: str, user_id: str):
+        success = await FinanceRepository.delete_transaction_atomic(transaction_id, user_id)
+        if not success:
+            raise AppError("TRANSACTION_NOT_FOUND", "Không tìm thấy giao dịch hoặc không có quyền thao tác", status_code=404)
+
+    @staticmethod
     async def _dispatch_budget_alert(alert: dict):
         # Fetch category name from category-service if category_id exists
-        category_name = "Tổng chi tiêu"
+        category_name = "Tổng chi tiêu toàn hệ thống"
         if alert.get("category_id"):
             try:
                 async with httpx.AsyncClient(timeout=3.0) as client:

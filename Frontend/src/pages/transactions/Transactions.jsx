@@ -6,6 +6,7 @@ import {
   ScanLine,
   Search,
   Filter,
+  Edit2,
   Trash2,
   FileText,
   ExternalLink,
@@ -287,6 +288,16 @@ export const Transactions = () => {
 
                       {/* Actions */}
                       <td className="py-3 px-4 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => {
+                            setSelectedTx(tx);
+                            setModalOpen(true);
+                          }}
+                          className="p-1 rounded text-text-secondary hover:text-accent-primary hover:bg-accent-primary/10 transition-colors cursor-pointer mr-1.5"
+                          title="Chỉnh sửa giao dịch"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => handleDelete(tx.transaction_id)}
                           className="p-1 rounded text-text-secondary hover:text-status-negative hover:bg-status-negative/10 transition-colors cursor-pointer"

@@ -4,7 +4,7 @@ import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { CurrencyInput } from '../../components/common/CurrencyInput';
 import { Select } from '../../components/common/Select';
-import { Upload, X, FileText, CheckCircle2 } from 'lucide-react';
+import { Upload, CheckCircle2, Sparkles } from 'lucide-react';
 import api from '../../services/api';
 
 export const TransactionModal = ({ isOpen, onClose, onSuccess, initialData = null }) => {
@@ -17,6 +17,8 @@ export const TransactionModal = ({ isOpen, onClose, onSuccess, initialData = nul
   const [attachmentFile, setAttachmentFile] = useState(null);
   const [attachmentId, setAttachmentId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [ocrLoading, setOcrLoading] = useState(false);
+  const [ocrNotice, setOcrNotice] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -33,11 +35,12 @@ export const TransactionModal = ({ isOpen, onClose, onSuccess, initialData = nul
       loadCategories();
       if (initialData) {
         setType(initialData.type || 'EXPENSE');
-        setAmount(initialData.amount || '');
+        setAmount(initialData.amount ? String(initialData.amount) : '');
         setCategoryId(initialData.category_id || '');
         setTransactionDate(initialData.transaction_date ? String(initialData.transaction_date).slice(0, 10) : new Date().toISOString().slice(0, 10));
         setNote(initialData.note || '');
         setAttachmentId(initialData.attachment_id || null);
+        setAttachmentFile(null);
       } else {
         setType('EXPENSE');
         setAmount('');
@@ -47,6 +50,7 @@ export const TransactionModal = ({ isOpen, onClose, onSuccess, initialData = nul
         setAttachmentFile(null);
         setAttachmentId(null);
       }
+      setOcrNotice('');
       setError('');
     }
   }, [isOpen, initialData]);
@@ -56,21 +60,54 @@ export const TransactionModal = ({ isOpen, onClose, onSuccess, initialData = nul
     if (!file) return;
 
     if (file.size > 10 * 1024 * 1024) {
-      setError('Tệp đính kèm không được vượt quá 10MB');
+      setError('Tệp đính kèm không được vượt quá 10MB (BR-08)');
       return;
     }
 
     setAttachmentFile(file);
+    setOcrNotice('');
     const formData = new FormData();
     formData.append('file', file);
 
     try {
       setLoading(true);
+      // 1. Upload to attachment-service (MinIO)
       const res = await api.post('/api/attachments/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setAttachmentId(res.data.attachment_id);
       setError('');
+
+      // 2. If it is an image, automatically extract receipt info via OCR (UC-10 -> UC-04)
+      if (file.type.startsWith('image/')) {
+        setOcrLoading(true);
+        try {
+          const ocrRes = await api.post('/api/ocr/scan', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+          const ocrData = ocrRes.data || {};
+          
+          if (ocrData.amount) {
+            setAmount(String(ocrData.amount));
+          }
+          if (ocrData.transaction_date) {
+            setTransactionDate(String(ocrData.transaction_date).slice(0, 10));
+          }
+          if (ocrData.category_id) {
+            setCategoryId(ocrData.category_id);
+          }
+          if (ocrData.merchant) {
+            setNote(ocrData.merchant);
+          }
+          setOcrNotice(
+            `✨ OCR bóc tách tự động: ${ocrData.merchant || 'Hóa đơn'} - ${Number(ocrData.amount || 0).toLocaleString('vi-VN')} đ`
+          );
+        } catch (ocrErr) {
+          console.warn('OCR extraction skipped:', ocrErr);
+        } finally {
+          setOcrLoading(false);
+        }
+      }
     } catch (err) {
       setError('Lỗi tải tệp chứng từ: ' + (err.message || 'Thất bại'));
       setAttachmentFile(null);
@@ -104,7 +141,12 @@ export const TransactionModal = ({ isOpen, onClose, onSuccess, initialData = nul
         attachment_id: attachmentId,
       };
 
-      await api.post('/api/finance/transactions', payload);
+      if (initialData?.transaction_id) {
+        await api.put(`/api/finance/transactions/${initialData.transaction_id}`, payload);
+      } else {
+        await api.post('/api/finance/transactions', payload);
+      }
+
       onSuccess?.();
       onClose();
     } catch (err) {
@@ -127,6 +169,13 @@ export const TransactionModal = ({ isOpen, onClose, onSuccess, initialData = nul
         {error && (
           <div className="p-3 rounded bg-status-negative/10 border border-status-negative/30 text-xs text-status-negative">
             {error}
+          </div>
+        )}
+
+        {ocrNotice && (
+          <div className="p-2.5 rounded bg-status-positive/10 border border-status-positive/30 text-xs text-status-positive flex items-center gap-1.5 animate-fadeIn">
+            <Sparkles className="w-4 h-4 flex-shrink-0" />
+            <span>{ocrNotice}</span>
           </div>
         )}
 
@@ -209,7 +258,7 @@ export const TransactionModal = ({ isOpen, onClose, onSuccess, initialData = nul
           onChange={(e) => setNote(e.target.value)}
         />
 
-        {/* Attachment Upload (MinIO S3) */}
+        {/* Attachment Upload with Auto-OCR */}
         <div>
           <label className="text-xs font-medium text-text-secondary mb-1.5 block">
             Hóa đơn chứng từ đính kèm (JPEG, PNG, PDF &le; 10MB)
@@ -218,7 +267,7 @@ export const TransactionModal = ({ isOpen, onClose, onSuccess, initialData = nul
             <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs border border-dashed border-border-subtle hover:border-accent-primary rounded bg-bg-elevated cursor-pointer transition-colors">
               <Upload className="w-4 h-4 text-accent-primary" />
               <span className="text-text-secondary truncate">
-                {attachmentFile ? attachmentFile.name : 'Tải lên ảnh hoặc tệp PDF'}
+                {attachmentFile ? attachmentFile.name : 'Tải lên ảnh hóa đơn (tự động điền qua OCR)'}
               </span>
               <input
                 type="file"
@@ -228,11 +277,17 @@ export const TransactionModal = ({ isOpen, onClose, onSuccess, initialData = nul
               />
             </label>
             {attachmentId && (
-              <span className="p-2 text-status-positive" title="Đã tải lên MinIO">
+              <span className="p-2 text-status-positive" title="Đã tải lên MinIO S3 an toàn">
                 <CheckCircle2 className="w-5 h-5" />
               </span>
             )}
           </div>
+          {ocrLoading && (
+            <p className="text-[11px] text-text-secondary mt-1 flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-accent-primary animate-spin" />
+              Đang phân tích và bóc tách thông tin hóa đơn qua OCR...
+            </p>
+          )}
         </div>
 
         {/* Actions */}
@@ -241,7 +296,7 @@ export const TransactionModal = ({ isOpen, onClose, onSuccess, initialData = nul
             Hủy bỏ
           </Button>
           <Button type="submit" variant="primary" loading={loading}>
-            {initialData ? 'Cập nhật' : 'Ghi nhận giao dịch'}
+            {initialData ? 'Cập nhật giao dịch' : 'Ghi nhận giao dịch'}
           </Button>
         </div>
       </form>
