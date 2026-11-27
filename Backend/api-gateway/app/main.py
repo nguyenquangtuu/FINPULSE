@@ -32,6 +32,7 @@ PUBLIC_PREFIXES = (
     "/api/auth/login-request",
     "/api/auth/verify-otp",
     "/api/auth/refresh-token",
+    "/api/auth/demo-login",
     "/health",
     "/docs",
     "/openapi.json",
@@ -43,7 +44,6 @@ SERVICE_ROUTES = {
     "/api/categories": settings.CATEGORY_SERVICE_URL,
     "/api/analytics": settings.ANALYTICS_SERVICE_URL,
     "/api/attachments": settings.ATTACHMENT_SERVICE_URL,
-    "/api/ocr": settings.OCR_SERVICE_URL,
     "/api/notifications": settings.NOTIFICATION_SERVICE_URL,
 }
 

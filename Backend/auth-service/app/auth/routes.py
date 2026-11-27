@@ -39,6 +39,15 @@ async def refresh_token(payload: RefreshTokenRequest):
     result = await AuthService.refresh_access_token(payload.refresh_token)
     return success(data=result, message="Làm mới token thành công")
 
+@router.post("/demo-login")
+async def demo_login(request: Request):
+    ip = request.client.host if request.client else "127.0.0.1"
+    result = await AuthService.quick_demo_login(
+        device_info="Web Browser (Demo Mode)",
+        ip_address=ip,
+    )
+    return success(data=result, message="Đăng nhập tài khoản Demo thành công")
+
 @router.get("/me")
 async def get_my_profile(claims: dict = Depends(get_current_user_claims)):
     user = await AuthRepository.get_user_by_id(claims["sub"])

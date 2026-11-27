@@ -73,7 +73,6 @@ services:
       CATEGORY_SERVICE_URL: http://category-service:8003
       ANALYTICS_SERVICE_URL: http://analytics-service:8004
       ATTACHMENT_SERVICE_URL: http://attachment-service:8005
-      OCR_SERVICE_URL: http://ocr-service:8006
       NOTIFICATION_SERVICE_URL: http://notification-service:8007
     depends_on:
       - auth-service
@@ -195,21 +194,6 @@ services:
     depends_on:
       - mysql
       - minio
-    networks:
-      - finpulse-net
-
-  ocr-service:
-    build:
-      context: ./ocr-service
-    container_name: finpulse-ocr-service
-    restart: unless-stopped
-    ports:
-      - "8006:8006"
-    environment:
-      PORT: 8006
-      JWT_SECRET: finpulse_jwt_super_secret_key_2026
-      INTERNAL_SERVICE_KEY: finpulse_internal_service_secret_token_2026
-      CATEGORY_SERVICE_URL: http://category-service:8003
     networks:
       - finpulse-net
 

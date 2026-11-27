@@ -8,7 +8,6 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   Plus,
-  ScanLine,
   ArrowRight,
   Clock,
   Sparkles,
@@ -44,16 +43,19 @@ export const Dashboard = () => {
   const [budgets, setBudgets] = useState([]);
   const [breakdown, setBreakdown] = useState([]);
   const [trends, setTrends] = useState([]);
+  const [wallets, setWallets] = useState([]);
+  const [netWorth, setNetWorth] = useState(0);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const [cashflowRes, transRes, budgetRes, breakdownRes, trendRes] = await Promise.allSettled([
+        const [cashflowRes, transRes, budgetRes, breakdownRes, trendRes, walletRes] = await Promise.allSettled([
           api.get('/api/analytics/cashflow'),
           api.get('/api/finance/transactions?limit=6'),
           api.get('/api/finance/budgets'),
           api.get('/api/analytics/breakdown'),
           api.get('/api/analytics/trends'),
+          api.get('/api/finance/wallets'),
         ]);
 
         if (cashflowRes.status === 'fulfilled') setSummary(cashflowRes.value.data);
@@ -61,6 +63,11 @@ export const Dashboard = () => {
         if (budgetRes.status === 'fulfilled') setBudgets(budgetRes.value.data || []);
         if (breakdownRes.status === 'fulfilled') setBreakdown(breakdownRes.value.data || []);
         if (trendRes.status === 'fulfilled') setTrends(trendRes.value.data || []);
+        if (walletRes.status === 'fulfilled') {
+          const wData = walletRes.value.data || {};
+          setWallets(wData.wallets || []);
+          setNetWorth(wData.total_balance || 0);
+        }
       } catch (err) {
         console.error('Error loading dashboard data:', err);
       } finally {
@@ -91,9 +98,9 @@ export const Dashboard = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link to="/ocr">
-            <Button variant="secondary" size="sm" icon={ScanLine}>
-              Quét hóa đơn
+          <Link to="/wallets">
+            <Button variant="secondary" size="sm" icon={Wallet}>
+              Ví & Nguồn tiền
             </Button>
           </Link>
           <Link to="/transactions">
@@ -106,19 +113,20 @@ export const Dashboard = () => {
 
       {/* 4 Financial Key Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {/* Metric 1: Net Cashflow */}
+        {/* Metric 1: Total Net Worth */}
         <div className="bg-bg-surface border border-border-subtle rounded-lg p-4">
           <div className="flex items-center justify-between text-xs text-text-secondary font-medium">
-            <span>Dòng tiền ròng (Surplus)</span>
+            <span>Tổng tài sản (Net Worth)</span>
             <Wallet className="w-4 h-4 text-accent-primary" />
           </div>
           <div className="mt-2 text-xl font-bold text-text-primary tabular-nums">
-            {formatCurrency(summary.net_cashflow, user?.currency)}
+            {formatCurrency(netWorth, user?.currency)}
           </div>
-          <div className="mt-1 flex items-center gap-1.5 text-xs text-text-secondary">
-            <Badge variant={summary.net_cashflow >= 0 ? 'positive' : 'negative'}>
-              Tỷ lệ tích lũy: {summary.savings_rate}%
-            </Badge>
+          <div className="mt-1 flex items-center justify-between text-xs text-text-secondary">
+            <span>{wallets.length} ví hoạt động</span>
+            <Link to="/wallets" className="text-accent-primary hover:underline font-medium text-[11px]">
+              Quản lý ví &rarr;
+            </Link>
           </div>
         </div>
 
@@ -164,6 +172,39 @@ export const Dashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Wallets Quick Balance Strip */}
+      {wallets.length > 0 && (
+        <div className="bg-bg-surface border border-border-subtle rounded-lg p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-2 text-xs font-semibold text-text-primary">
+            <Wallet className="w-4 h-4 text-accent-primary" />
+            <span>Nguồn tiền:</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {wallets.map((w) => (
+              <div
+                key={w.wallet_id}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-bg-elevated border border-border-subtle text-xs"
+              >
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: w.color || '#10B981' }}
+                />
+                <span className="text-text-secondary">{w.name}:</span>
+                <span className="font-semibold text-text-primary tabular-nums">
+                  {formatCurrency(w.balance, user?.currency || 'VND')}
+                </span>
+              </div>
+            ))}
+          </div>
+          <Link
+            to="/wallets"
+            className="text-xs text-accent-primary hover:underline font-medium ml-auto"
+          >
+            Chuyển tiền / Thêm ví &rarr;
+          </Link>
+        </div>
+      )}
 
       {/* Main Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

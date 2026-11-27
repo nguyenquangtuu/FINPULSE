@@ -17,7 +17,8 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const initAuth = async () => {
       const token = localStorage.getItem('finpulse_access_token');
-      if (token) {
+      const refreshToken = localStorage.getItem('finpulse_refresh_token');
+      if (token || refreshToken) {
         try {
           const res = await api.get('/api/auth/me');
           if (res?.data) {
@@ -26,11 +27,7 @@ export const AuthProvider = ({ children }) => {
           }
         } catch (err) {
           console.warn('Session check warning:', err.message);
-          // Clear credentials if token expired or rejected
-          const msg = (err.message || '').toUpperCase();
-          if (msg.includes('TOKEN') || msg.includes('UNAUTHORIZED') || msg.includes('401')) {
-            localStorage.removeItem('finpulse_access_token');
-            localStorage.removeItem('finpulse_refresh_token');
+          if (!localStorage.getItem('finpulse_access_token')) {
             localStorage.removeItem('finpulse_user');
             setUser(null);
           }
@@ -67,6 +64,16 @@ export const AuthProvider = ({ children }) => {
     return userData;
   };
 
+  const demoLogin = async () => {
+    const res = await api.post('/api/auth/demo-login');
+    const { access_token, refresh_token, user: userData } = res.data;
+    localStorage.setItem('finpulse_access_token', access_token);
+    localStorage.setItem('finpulse_refresh_token', refresh_token);
+    localStorage.setItem('finpulse_user', JSON.stringify(userData));
+    setUser(userData);
+    return userData;
+  };
+
   const logout = () => {
     localStorage.removeItem('finpulse_access_token');
     localStorage.removeItem('finpulse_refresh_token');
@@ -92,6 +99,7 @@ export const AuthProvider = ({ children }) => {
         requestLogin,
         requestRegister,
         verifyOtp,
+        demoLogin,
         logout,
         updateProfile,
       }}

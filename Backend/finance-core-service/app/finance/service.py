@@ -44,6 +44,29 @@ class FinanceService:
             raise AppError("TRANSACTION_NOT_FOUND", "Không tìm thấy giao dịch hoặc không có quyền thao tác", status_code=404)
 
     @staticmethod
+    async def create_transfer(user_id: str, payload: dict) -> dict:
+        trans_date = payload.get("transaction_date") or datetime.datetime.now()
+        amount = payload["amount"]
+        return await FinanceRepository.create_transfer_atomic(
+            user_id=user_id,
+            from_wallet_id=payload["from_wallet_id"],
+            to_wallet_id=payload["to_wallet_id"],
+            amount=amount,
+            note=payload.get("note", ""),
+            trans_date=trans_date,
+        )
+
+    @staticmethod
+    async def list_wallets_with_summary(user_id: str) -> dict:
+        wallets = await FinanceRepository.list_wallets(user_id)
+        total_balance = sum(w["balance"] for w in wallets)
+        return {
+            "wallets": wallets,
+            "total_balance": total_balance,
+            "wallet_count": len(wallets),
+        }
+
+    @staticmethod
     async def _dispatch_budget_alert(alert: dict):
         # Fetch category name from category-service if category_id exists
         category_name = "Tổng chi tiêu toàn hệ thống"

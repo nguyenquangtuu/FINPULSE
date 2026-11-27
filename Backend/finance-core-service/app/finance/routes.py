@@ -7,6 +7,9 @@ from app.finance.schemas import (
     BudgetCreate,
     BudgetUpdate,
     RecurringRuleCreate,
+    WalletCreate,
+    WalletUpdate,
+    TransferCreate,
 )
 from app.finance.service import FinanceService
 from app.finance.repository import FinanceRepository
@@ -30,7 +33,7 @@ async def create_transaction(
 @router.get("/transactions")
 async def list_transactions(
     category_id: Optional[str] = Query(None),
-    type: Optional[str] = Query(None, pattern="^(INCOME|EXPENSE)$"),
+    type: Optional[str] = Query(None, pattern="^(INCOME|EXPENSE|TRANSFER)$"),
     from_date: Optional[datetime] = Query(None),
     to_date: Optional[datetime] = Query(None),
     keyword: Optional[str] = Query(None),
@@ -82,6 +85,60 @@ async def delete_transaction(
     if not deleted:
         raise AppError("TRANSACTION_NOT_FOUND", "Không tìm thấy giao dịch hoặc không có quyền xóa", status_code=404)
     return success(message="Xóa giao dịch thành công")
+
+# --- TRANSFERS ---
+@router.post("/transfers")
+async def create_transfer(
+    payload: TransferCreate,
+    claims: dict = Depends(get_current_user_claims),
+):
+    result = await FinanceService.create_transfer(claims["sub"], payload.model_dump())
+    return success(data=result, message="Chuyển tiền giữa các ví thành công")
+
+# --- WALLETS ---
+@router.get("/wallets")
+async def list_wallets(claims: dict = Depends(get_current_user_claims)):
+    result = await FinanceService.list_wallets_with_summary(claims["sub"])
+    return success(data=result)
+
+@router.post("/wallets")
+async def create_wallet(
+    payload: WalletCreate,
+    claims: dict = Depends(get_current_user_claims),
+):
+    created = await FinanceRepository.create_wallet(claims["sub"], payload.model_dump())
+    return success(data=created, message="Tạo ví tài khoản thành công")
+
+@router.get("/wallets/{wallet_id}")
+async def get_wallet(
+    wallet_id: str,
+    claims: dict = Depends(get_current_user_claims),
+):
+    wallet = await FinanceRepository.get_wallet(wallet_id, claims["sub"])
+    if not wallet:
+        raise AppError("WALLET_NOT_FOUND", "Không tìm thấy ví", status_code=404)
+    return success(data=wallet)
+
+@router.put("/wallets/{wallet_id}")
+async def update_wallet(
+    wallet_id: str,
+    payload: WalletUpdate,
+    claims: dict = Depends(get_current_user_claims),
+):
+    updated = await FinanceRepository.update_wallet(wallet_id, claims["sub"], payload.model_dump(exclude_unset=True))
+    if not updated:
+        raise AppError("WALLET_NOT_FOUND", "Không tìm thấy ví", status_code=404)
+    return success(data=updated, message="Cập nhật thông tin ví thành công")
+
+@router.delete("/wallets/{wallet_id}")
+async def archive_wallet(
+    wallet_id: str,
+    claims: dict = Depends(get_current_user_claims),
+):
+    archived = await FinanceRepository.archive_wallet(wallet_id, claims["sub"])
+    if not archived:
+        raise AppError("WALLET_NOT_FOUND", "Không tìm thấy ví", status_code=404)
+    return success(message="Lưu trữ ví thành công")
 
 # --- BUDGETS ---
 @router.post("/budgets")

@@ -7,7 +7,7 @@ import { Mail, ShieldCheck, ArrowRight, Sparkles, CheckCircle2 } from 'lucide-re
 
 export const Login = () => {
   const navigate = useNavigate();
-  const { requestLogin, requestRegister, verifyOtp, isAuthenticated } = useAuth();
+  const { requestLogin, requestRegister, verifyOtp, demoLogin, isAuthenticated } = useAuth();
 
   const [mode, setMode] = useState('login'); // 'login' | 'register'
   const [step, setStep] = useState(1); // 1: Email, 2: OTP
@@ -96,10 +96,17 @@ export const Login = () => {
     }
   };
 
-  const handleQuickDemo = () => {
-    setMode('login');
-    setEmail('demo@finpulse.local');
-    setStep(1);
+  const handleQuickDemo = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      await demoLogin();
+      navigate('/');
+    } catch (err) {
+      setError(err.message || 'Không thể đăng nhập tài khoản Demo');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

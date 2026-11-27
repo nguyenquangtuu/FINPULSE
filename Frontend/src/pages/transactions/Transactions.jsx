@@ -3,7 +3,7 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Plus,
-  ScanLine,
+  Wallet,
   Search,
   Filter,
   Edit2,
@@ -27,6 +27,7 @@ export const Transactions = () => {
   const { user } = useAuth();
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [wallets, setWallets] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const limit = 15;
@@ -39,10 +40,14 @@ export const Transactions = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedTx, setSelectedTx] = useState(null);
 
-  const loadCategories = async () => {
+  const loadMetaData = async () => {
     try {
-      const res = await api.get('/api/categories?format=flat');
-      setCategories(res.data || []);
+      const [cRes, wRes] = await Promise.all([
+        api.get('/api/categories?format=flat'),
+        api.get('/api/finance/wallets'),
+      ]);
+      setCategories(cRes.data || []);
+      setWallets(wRes.data?.wallets || []);
     } catch (e) {
       console.error(e);
     }
@@ -70,7 +75,7 @@ export const Transactions = () => {
   };
 
   useEffect(() => {
-    loadCategories();
+    loadMetaData();
   }, []);
 
   useEffect(() => {
@@ -113,6 +118,11 @@ export const Transactions = () => {
     return acc;
   }, {});
 
+  const walletMap = wallets.reduce((acc, w) => {
+    acc[w.wallet_id] = w;
+    return acc;
+  }, {});
+
   const totalPages = Math.ceil(total / limit) || 1;
 
   return (
@@ -128,9 +138,9 @@ export const Transactions = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link to="/ocr">
-            <Button variant="secondary" size="sm" icon={ScanLine}>
-              Quét hóa đơn OCR
+          <Link to="/wallets">
+            <Button variant="secondary" size="sm" icon={Wallet}>
+              Quản lý ví & nguồn tiền
             </Button>
           </Link>
           <Button
@@ -177,6 +187,7 @@ export const Transactions = () => {
             <option value="">Tất cả loại</option>
             <option value="EXPENSE">Khoản Chi (-)</option>
             <option value="INCOME">Khoản Thu (+)</option>
+            <option value="TRANSFER">Chuyển Tiền (⇄)</option>
           </Select>
 
           <Select
@@ -205,6 +216,7 @@ export const Transactions = () => {
               <tr>
                 <th className="py-3 px-4">Ngày giao dịch</th>
                 <th className="py-3 px-4">Loại</th>
+                <th className="py-3 px-4">Ví / Nguồn tiền</th>
                 <th className="py-3 px-4">Danh mục</th>
                 <th className="py-3 px-4">Ghi chú</th>
                 <th className="py-3 px-4">Chứng từ</th>
@@ -215,20 +227,23 @@ export const Transactions = () => {
             <tbody className="divide-y divide-border-subtle">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-text-secondary">
+                  <td colSpan={8} className="py-12 text-center text-text-secondary">
                     Đang tải dữ liệu giao dịch...
                   </td>
                 </tr>
               ) : transactions.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-text-secondary">
+                  <td colSpan={8} className="py-12 text-center text-text-secondary">
                     Không tìm thấy giao dịch nào phù hợp với bộ lọc.
                   </td>
                 </tr>
               ) : (
                 transactions.map((tx) => {
+                  const isTransfer = tx.type === 'TRANSFER';
                   const isIncome = tx.type === 'INCOME';
                   const cat = catMap[tx.category_id];
+                  const fromW = walletMap[tx.wallet_id];
+                  const toW = walletMap[tx.to_wallet_id];
 
                   return (
                     <tr
@@ -242,20 +257,42 @@ export const Transactions = () => {
 
                       {/* Type */}
                       <td className="py-3 px-4 whitespace-nowrap">
-                        <Badge variant={isIncome ? 'positive' : 'negative'}>
-                          {isIncome ? 'Thu nhập' : 'Chi tiêu'}
-                        </Badge>
+                        {isTransfer ? (
+                          <Badge variant="info">Chuyển tiền</Badge>
+                        ) : (
+                          <Badge variant={isIncome ? 'positive' : 'negative'}>
+                            {isIncome ? 'Thu nhập' : 'Chi tiêu'}
+                          </Badge>
+                        )}
+                      </td>
+
+                      {/* Wallet */}
+                      <td className="py-3 px-4 whitespace-nowrap text-text-primary">
+                        {isTransfer ? (
+                          <span className="font-semibold text-accent-primary flex items-center gap-1 text-[11px]">
+                            {fromW?.name || 'Ví'} ➔ {toW?.name || 'Ví'}
+                          </span>
+                        ) : (
+                          <span className="text-text-secondary flex items-center gap-1.5">
+                            <Wallet className="w-3.5 h-3.5" />
+                            {fromW?.name || 'Ví mặc định'}
+                          </span>
+                        )}
                       </td>
 
                       {/* Category */}
                       <td className="py-3 px-4 whitespace-nowrap font-medium text-text-primary">
-                        <span className="flex items-center gap-1.5">
-                          <span
-                            className="w-2 h-2 rounded-full"
-                            style={{ backgroundColor: cat?.color || '#94A3B8' }}
-                          />
-                          {cat?.name || 'Chưa phân loại'}
-                        </span>
+                        {isTransfer ? (
+                          <span className="text-text-secondary/70 italic text-[11px]">Luân chuyển ví</span>
+                        ) : (
+                          <span className="flex items-center gap-1.5">
+                            <span
+                              className="w-2 h-2 rounded-full"
+                              style={{ backgroundColor: cat?.color || '#94A3B8' }}
+                            />
+                            {cat?.name || 'Chưa phân loại'}
+                          </span>
+                        )}
                       </td>
 
                       {/* Note */}
@@ -280,24 +317,30 @@ export const Transactions = () => {
                       {/* Amount */}
                       <td
                         className={`py-3 px-4 text-right font-semibold tabular-nums whitespace-nowrap ${
-                          isIncome ? 'text-status-positive' : 'text-status-negative'
+                          isTransfer
+                            ? 'text-text-primary'
+                            : isIncome
+                            ? 'text-status-positive'
+                            : 'text-status-negative'
                         }`}
                       >
-                        {isIncome ? '+' : '-'}{formatCurrency(tx.amount, user?.currency)}
+                        {isTransfer ? '⇄ ' : isIncome ? '+' : '-'}{formatCurrency(tx.amount, user?.currency)}
                       </td>
 
                       {/* Actions */}
                       <td className="py-3 px-4 text-right whitespace-nowrap">
-                        <button
-                          onClick={() => {
-                            setSelectedTx(tx);
-                            setModalOpen(true);
-                          }}
-                          className="p-1 rounded text-text-secondary hover:text-accent-primary hover:bg-accent-primary/10 transition-colors cursor-pointer mr-1.5"
-                          title="Chỉnh sửa giao dịch"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
+                        {!isTransfer && (
+                          <button
+                            onClick={() => {
+                              setSelectedTx(tx);
+                              setModalOpen(true);
+                            }}
+                            className="p-1 rounded text-text-secondary hover:text-accent-primary hover:bg-accent-primary/10 transition-colors cursor-pointer mr-1.5"
+                            title="Chỉnh sửa giao dịch"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDelete(tx.transaction_id)}
                           className="p-1 rounded text-text-secondary hover:text-status-negative hover:bg-status-negative/10 transition-colors cursor-pointer"

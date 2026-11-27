@@ -7,9 +7,9 @@ import {
   FolderTree,
   Repeat,
   BarChart3,
-  ScanLine,
   Bell,
   Settings,
+  Wallet,
   ShieldCheck,
   TrendingUp,
 } from 'lucide-react';
@@ -30,6 +30,7 @@ export const Sidebar = ({ onClose }) => {
     {
       title: 'Finance',
       items: [
+        { label: 'Ví & Nguồn tiền', path: '/wallets', icon: Wallet },
         { label: 'Giao dịch', path: '/transactions', icon: ArrowLeftRight },
         { label: 'Ngân sách', path: '/budgets', icon: PieChart },
         { label: 'Danh mục', path: '/categories', icon: FolderTree },
@@ -45,7 +46,6 @@ export const Sidebar = ({ onClose }) => {
     {
       title: 'Utilities',
       items: [
-        { label: 'Quét hóa đơn OCR', path: '/ocr', icon: ScanLine },
         { label: 'Thông báo', path: '/notifications', icon: Bell, badge: unreadCount },
       ],
     },

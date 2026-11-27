@@ -4,6 +4,24 @@ SET CHARACTER SET utf8mb4;
 CREATE DATABASE IF NOT EXISTS finance_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE finance_db;
 
+CREATE TABLE IF NOT EXISTS wallets (
+    wallet_id CHAR(36) PRIMARY KEY,
+    user_id CHAR(36) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    wallet_type ENUM('CASH', 'BANK', 'E_WALLET', 'SAVINGS', 'OTHER') NOT NULL DEFAULT 'CASH',
+    balance DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
+    initial_balance DECIMAL(15, 2) NOT NULL DEFAULT 0.00,
+    currency VARCHAR(10) NOT NULL DEFAULT 'VND',
+    icon VARCHAR(50) NULL,
+    color VARCHAR(20) NULL,
+    is_default BOOLEAN NOT NULL DEFAULT FALSE,
+    status ENUM('ACTIVE', 'ARCHIVED') NOT NULL DEFAULT 'ACTIVE',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_wallet_user (user_id),
+    INDEX idx_wallet_status (user_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS recurring_rules (
     recurring_id CHAR(36) PRIMARY KEY,
     user_id CHAR(36) NOT NULL,
@@ -23,10 +41,12 @@ CREATE TABLE IF NOT EXISTS recurring_rules (
 CREATE TABLE IF NOT EXISTS transactions (
     transaction_id CHAR(36) PRIMARY KEY,
     user_id CHAR(36) NOT NULL,
-    category_id CHAR(36) NOT NULL,
+    category_id CHAR(36) NULL,
+    wallet_id CHAR(36) NULL,
+    to_wallet_id CHAR(36) NULL,
     attachment_id CHAR(36) NULL,
     amount DECIMAL(15, 2) NOT NULL,
-    type ENUM('INCOME', 'EXPENSE') NOT NULL,
+    type ENUM('INCOME', 'EXPENSE', 'TRANSFER') NOT NULL,
     transaction_date DATETIME NOT NULL,
     note TEXT NULL,
     is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
@@ -38,6 +58,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     INDEX idx_trans_user (user_id),
     INDEX idx_trans_date (user_id, transaction_date),
     INDEX idx_trans_category (user_id, category_id),
+    INDEX idx_trans_wallet (user_id, wallet_id),
     INDEX idx_trans_type (user_id, type)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

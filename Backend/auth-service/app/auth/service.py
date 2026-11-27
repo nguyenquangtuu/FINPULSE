@@ -86,3 +86,20 @@ class AuthService:
             "access_token": new_access_token,
             "token_type": "Bearer",
         }
+
+    @staticmethod
+    async def quick_demo_login(device_info: str = "Web Browser", ip_address: str = "127.0.0.1") -> dict:
+        email = "demo@finpulse.local"
+        user = await AuthRepository.get_user_by_email(email)
+        if not user:
+            user = await AuthRepository.create_user(full_name="Demo User", email=email)
+
+        access_token = create_access_token(user["user_id"], user["email"], user["role"])
+        refresh_token = create_refresh_token(user["user_id"])
+        await AuthRepository.create_session(user["user_id"], refresh_token, device_info, ip_address)
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "Bearer",
+            "user": user,
+        }
